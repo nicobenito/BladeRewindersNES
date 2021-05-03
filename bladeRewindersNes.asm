@@ -18,6 +18,7 @@ playerCoorX  .rs 1; coordinate x 1-8
 playerCoorY .rs 1; coordinate y 1-8
 playerPossibleCoorX .rs 1 ;next move
 playerPossibleCoorY .rs 1 ; next move
+canMove   .rs 1 ; flag
 boardLength .rs 1
 boardHeight .rs 1
 ballup     .rs 1  ; 1 = ball moving up
@@ -176,7 +177,7 @@ InsideLoop:
   ;TEST
   LDA #$83
   STA blockY
-  LDA #6C
+  LDA #$6C
   STA blockX
   ;block coors
   LDA #$04
@@ -392,6 +393,16 @@ ReadLeftBtn:
   SEC
   SBC boardLength
   BEQ ReadLeftBtnDone
+  ; check blocks
+  LDA playerCoorX
+  ADC #$01
+  STA playerPossibleCoorX
+  LDA playerCoorY
+  STA playerPossibleCoorY
+  JSR CheckNextPosition
+  LDA canMove
+  CMP #$01
+  BNE ReadRightBtnDone
   LDA buttons1
   STA buttons1pre
   LDA posx
@@ -439,6 +450,17 @@ ReadRightBtn:
   SEC
   SBC #$01
   BEQ ReadRightBtnDone
+  ; check blocks
+  LDA playerCoorX
+  SEC
+  SBC #$01
+  STA playerPossibleCoorX
+  LDA playerCoorY
+  STA playerPossibleCoorY
+  JSR CheckNextPosition
+  LDA canMove
+  CMP #$01
+  BNE ReadRightBtnDone
   LDA buttons1
   STA buttons1pre
   CLC
@@ -471,6 +493,17 @@ ReadDownBtn:
   SEC
   SBC #$01
   BEQ ReadDownBtnDone
+  ; check blocks
+  LDA playerCoorY
+  SEC
+  SBC #$01
+  STA playerPossibleCoorY
+  LDA playerCoorX
+  STA playerPossibleCoorX
+  JSR CheckNextPosition
+  LDA canMove
+  CMP #$01
+  BNE ReadDownBtnDone
   LDA buttons1
   STA buttons1pre
   CLC
@@ -503,6 +536,16 @@ ReadUpBtn:
   SEC
   SBC boardHeight
   BEQ ReadUpBtnDone
+  ; check blocks
+  LDA playerCoorY
+  ADC #$01
+  STA playerPossibleCoorY
+  LDA playerCoorX
+  STA playerPossibleCoorX
+  JSR CheckNextPosition
+  LDA canMove
+  CMP #$01
+  BNE ReadUpBtnDone
   LDA buttons1
   STA buttons1pre
   LDA posy
@@ -566,7 +609,20 @@ DrawScore:
   ;;or using many sprites
   RTS
  
- 
+CheckNextPosition:
+  LDA #$01
+  STA canMove
+  LDA blockCoorX
+  CMP playerPossibleCoorX
+  BNE CheckNextPositionDone ;X pos different
+  LDA blockCoorY
+  CMP playerPossibleCoorY
+  BNE CheckNextPositionDone ;Y pos different
+  LDA #$00
+  STA canMove
+  RTS
+
+CheckNextPositionDone:
  
 ReadController1:
   LDA #$01
@@ -616,7 +672,7 @@ palette:
 sprites:
      ;vert tile attr horiz
   .db $80, $40, $00, $80   ;sprite 0
-  ; .db $80, $01, $00, $88   ;sprite 1
+  .db $83, $41, $00, $6C   ;sprite 1
   ; .db $88, $10, $00, $80   ;sprite 2
   ; .db $88, $11, $00, $88   ;sprite 3
   ; .db $90, $20, $00, $80   ;sprite 4
