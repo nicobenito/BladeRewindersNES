@@ -175,14 +175,14 @@ InsideLoop:
   STA posx
 
   ;TEST
-  LDA #$83
-  STA blockY
-  LDA #$6C
-  STA blockX
-  ;block coors
-  LDA #$04
-  STA blockCoorX
-  STA blockCoorY
+  ; LDA #$83
+  ; STA blockY
+  ; LDA #$6C
+  ; STA blockX
+  ; ;block coors
+  ; LDA #$04
+  ; STA blockCoorX
+  ; STA blockCoorY
 
   ;set coordinates
   LDA #$01
@@ -612,18 +612,31 @@ DrawScore:
 CheckNextPosition:
   LDA #$01
   STA canMove
-  LDA blockCoorX
+  LDX #$00
+  LDY #$00  
+BlockLoop:
+  INX
+  LDA blocks, Y
+  INY
   CMP playerPossibleCoorX
-  BNE CheckNextPositionDone ;X pos different
-  LDA blockCoorY
+  BNE BlockLoopContinue ;X pos different
+  LDA blocks, Y
   CMP playerPossibleCoorY
-  BNE CheckNextPositionDone ;Y pos different
+  BNE BlockLoopContinue ;Y pos different
   LDA #$00
   STA canMove
   RTS
+BlockLoopContinue:
+  INY
+  INY
+  INY
+  CPX #$03
+  BNE BlockLoop
+  RTS
 
 CheckNextPositionDone:
- 
+
+
 ReadController1:
   LDA #$01
   STA $4016
@@ -673,6 +686,8 @@ sprites:
      ;vert tile attr horiz
   .db $80, $40, $00, $80   ;sprite 0
   .db $83, $41, $00, $6C   ;sprite 1
+  .db $73, $41, $00, $8C   ;sprite 1
+  .db $8B, $41, $00, $9C   ;sprite 1
   ; .db $88, $10, $00, $80   ;sprite 2
   ; .db $88, $11, $00, $88   ;sprite 3
   ; .db $90, $20, $00, $80   ;sprite 4
@@ -680,7 +695,10 @@ sprites:
   ; .db $98, $30, $00, $80   ;sprite 6
   ; .db $98, $31, $00, $88   ;sprite 7
 
-
+blocks:
+  .db $04, $04, $6C, $83
+  .db $04, $06, $8C, $73
+  .db $02, $05, $8C, $73
 
   .org $FFFA     ;first of the three vectors starts here
   .dw NMI        ;when an NMI happens (once per frame if enabled) the 
