@@ -34,6 +34,8 @@ buttons2   .rs 1  ; player 2 gamepad buttons, one bit per button
 buttons1pre .rs 1; player 1 pre state for release
 score1     .rs 1  ; player 1 score, 0-15
 score2     .rs 1  ; player 2 score, 0-15
+levelNumber .rs 1 ; level number 0-?
+levelSprites .rs 2; two bytes pointer/address ?
 ;test
 blockX  .rs 1
 blockY  .rs 1
@@ -120,10 +122,23 @@ LoadPalettesLoop:
   BNE LoadPalettesLoop  ; Branch to LoadPalettesLoop if compare was Not Equal to zero
                         ; if compare was equal to 32, keep going down
 
+ LDA #$01
+ STA levelNumber
+
+LoadLevel:
+  lda levelNumber ;gets the number of the current level
+	asl A ;multiplies it by 2 since each pointer is 2 bytes
+	tax ;use it as an index
+	lda spritesPointers+0, x ;copies the low byte to ZP
+	sta levelSprites+0
+	lda spritesPointers+1, x ;copies the high byte to ZP
+	sta levelSprites+1
+
+
 LoadSprites:
-  LDX #$00              ; start at 0
+  ;LDX #$00              ; start at 0
 LoadSpritesLoop:
-  LDA sprites, x        ; load data from address (sprites +  x)
+  LDA (levelSprites), x        ; load data from address (sprites +  x)
   STA $0200, x          ; store into RAM address ($0200 + x)
   INX                   ; X = X + 1
   CPX #$20              ; Compare X to hex $10, decimal 16
@@ -682,23 +697,28 @@ palette:
   .db $22,$29,$1A,$0F,  $22,$36,$17,$0F,  $22,$30,$21,$0F,  $22,$27,$17,$0F   ;;background palette
   .db $22,$13,$23,$33,  $22,$02,$38,$3C,  $22,$13,$23,$33,  $22,$02,$38,$3C   ;;sprite palette
 
-sprites:
+spritesLvl1:
      ;vert tile attr horiz
   .db $80, $40, $00, $80   ;sprite 0
   .db $83, $41, $00, $6C   ;sprite 1
   .db $73, $41, $00, $8C   ;sprite 1
   .db $8B, $41, $00, $9C   ;sprite 1
-  ; .db $88, $10, $00, $80   ;sprite 2
-  ; .db $88, $11, $00, $88   ;sprite 3
-  ; .db $90, $20, $00, $80   ;sprite 4
-  ; .db $90, $21, $00, $88   ;sprite 5
-  ; .db $98, $30, $00, $80   ;sprite 6
-  ; .db $98, $31, $00, $88   ;sprite 7
+
+spritesLvl2:
+     ;vert tile attr horiz
+  .db $80, $40, $00, $80   ;sprite 0
+  .db $83, $41, $00, $6C   ;sprite 1
+  .db $8B, $41, $00, $9C   ;sprite 1
 
 blocks:
   .db $04, $04, $6C, $83
   .db $04, $06, $8C, $73
   .db $02, $05, $8C, $73
+
+spritesPointers:
+  .dw spritesLvl1
+  .dw spritesLvl2
+
 
   .org $FFFA     ;first of the three vectors starts here
   .dw NMI        ;when an NMI happens (once per frame if enabled) the 
