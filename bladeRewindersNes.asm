@@ -35,7 +35,10 @@ buttons1pre .rs 1; player 1 pre state for release
 score1     .rs 1  ; player 1 score, 0-15
 score2     .rs 1  ; player 2 score, 0-15
 levelNumber .rs 1 ; level number 0-?
-levelSprites .rs 2; two bytes pointer/address ?
+levelSprites .rs 2; two bytes pointer/address
+spritesAmount .rs 1; total number of sprites on a level
+exitX     .rs 1
+exitY     .rs 2
 ;test
 blockX  .rs 1
 blockY  .rs 1
@@ -122,7 +125,7 @@ LoadPalettesLoop:
   BNE LoadPalettesLoop  ; Branch to LoadPalettesLoop if compare was Not Equal to zero
                         ; if compare was equal to 32, keep going down
 
- LDA #$01
+ LDA #$00
  STA levelNumber
 
 LoadLevel:
@@ -133,15 +136,18 @@ LoadLevel:
 	sta levelSprites+0
 	lda spritesPointers+1, x ;copies the high byte to ZP
 	sta levelSprites+1
+  LDY levelNumber
+  LDA spritesTotalPerLvl, y
+  STA spritesAmount
 
 
 LoadSprites:
-  ;LDX #$00              ; start at 0
+  LDY #$00              ; start at 0
 LoadSpritesLoop:
-  LDA (levelSprites), x        ; load data from address (sprites +  x)
-  STA $0200, x          ; store into RAM address ($0200 + x)
-  INX                   ; X = X + 1
-  CPX #$20              ; Compare X to hex $10, decimal 16
+  LDA [levelSprites], y        ; load data from address (sprites +  x)
+  STA $0200, y          ; store into RAM address ($0200 + x)
+  INY                   ; X = X + 1
+  CPY spritesAmount     ; Compare X to hex $10, decimal 16
   BNE LoadSpritesLoop   ; Branch to LoadSpritesLoop if compare was Not Equal to zero
                         ; if compare was equal to 16, keep going down
 
@@ -212,6 +218,10 @@ InsideLoop:
   LDA #$02
   STA ballspeedx
   STA ballspeedy
+
+  LDA #$06
+  STA exitX
+  STA exitY
 
 
 ;;:Set starting game state
@@ -582,6 +592,7 @@ ReadUpBtnDone:
   LDA buttons1
   EOR #$FF
   STA buttons1pre
+  JSR CheckIfExit
   JMP GameEngineDone
 
 UpdateSprites:
@@ -651,6 +662,18 @@ BlockLoopContinue:
 
 CheckNextPositionDone:
 
+CheckIfExit:
+  LDA playerCoorX
+  CMP exitX
+  BNE CheckIfExitDone
+  LDA playerCoorY
+  CMP exitY
+  BNE CheckIfExitDone
+  LDA #$01
+  STA levelNumber
+  JMP LoadLevel
+CheckIfExitDone:
+  RTS
 
 ReadController1:
   LDA #$01
@@ -696,6 +719,9 @@ background:
 palette:
   .db $22,$29,$1A,$0F,  $22,$36,$17,$0F,  $22,$30,$21,$0F,  $22,$27,$17,$0F   ;;background palette
   .db $22,$13,$23,$33,  $22,$02,$38,$3C,  $22,$13,$23,$33,  $22,$02,$38,$3C   ;;sprite palette
+
+spritesTotalPerLvl:
+  .db $10, $0C
 
 spritesLvl1:
      ;vert tile attr horiz
