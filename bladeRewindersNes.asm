@@ -37,8 +37,10 @@ score2     .rs 1  ; player 2 score, 0-15
 levelNumber .rs 1 ; level number 0-?
 levelSprites .rs 2; two bytes pointer/address
 spritesAmount .rs 1; total number of sprites on a level
+levelBlocks .rs 2; two bytes pointer for blocks, is required pointer for each type?
+blocksAmount .rs 1; total number of blocks per level, used to limit loop
 exitX     .rs 1
-exitY     .rs 2
+exitY     .rs 1
 ;test
 blockX  .rs 1
 blockY  .rs 1
@@ -80,7 +82,7 @@ RESET:
   TXS          ; Set up stack
   INX          ; now X = 0
   STX $2000    ; disable NMI
-  STX $2001    ; disable rendering
+  STX $2001    ; disable rendering -- turn off PPU
   STX $4010    ; disable DMC IRQs
 
 vblankwait1:       ; First wait for vblank to make sure PPU is ready
@@ -125,61 +127,10 @@ LoadPalettesLoop:
   BNE LoadPalettesLoop  ; Branch to LoadPalettesLoop if compare was Not Equal to zero
                         ; if compare was equal to 32, keep going down
 
- LDA #$00
- STA levelNumber
-
-LoadLevel:
-  lda levelNumber ;gets the number of the current level
-	asl A ;multiplies it by 2 since each pointer is 2 bytes
-	tax ;use it as an index
-	lda spritesPointers+0, x ;copies the low byte to ZP
-	sta levelSprites+0
-	lda spritesPointers+1, x ;copies the high byte to ZP
-	sta levelSprites+1
-  LDY levelNumber
-  LDA spritesTotalPerLvl, y
-  STA spritesAmount
-
-
-LoadSprites:
-  LDY #$00              ; start at 0
-LoadSpritesLoop:
-  LDA [levelSprites], y        ; load data from address (sprites +  x)
-  STA $0200, y          ; store into RAM address ($0200 + x)
-  INY                   ; X = X + 1
-  CPY spritesAmount     ; Compare X to hex $10, decimal 16
-  BNE LoadSpritesLoop   ; Branch to LoadSpritesLoop if compare was Not Equal to zero
-                        ; if compare was equal to 16, keep going down
-
-LoadBackground:
-  LDA $2002             ; read PPU status to reset the high/low latch
-  LDA #$20
-  STA $2006             ; write the high byte of $2000 address
   LDA #$00
-  STA $2006             ; write the low byte of $2000 address
+  STA levelNumber
 
-  LDA #$00
-  STA pointerLo       ; put the low byte of the address of background into pointer
-  LDA #HIGH(background)
-  STA pointerHi       ; put the high byte of the address into pointer
-  
-  LDX #$00            ; start at pointer + 0
-  LDY #$00
-OutsideLoop:
-  
-InsideLoop:
-  LDA [pointerLo], y  ; copy one background byte from address in pointer plus Y
-  STA $2007           ; this runs 256 * 4 times
-  
-  INY                 ; inside loop counter
-  CPY #$00
-  BNE InsideLoop      ; run the inside loop 256 times before continuing down
-  
-  INC pointerHi       ; low byte went 0 to 256, so high byte needs to be changed now
-  
-  INX
-  CPX #$04
-  BNE OutsideLoop     ; run the outside loop 256 times before continuing down
+  JSR LoadLevel
 
 ;;;Set some initial ball stats
   LDA #$01
@@ -642,11 +593,11 @@ CheckNextPosition:
   LDY #$00  
 BlockLoop:
   INX
-  LDA blocks, Y
+  LDA [levelBlocks], Y
   INY
   CMP playerPossibleCoorX
   BNE BlockLoopContinue ;X pos different
-  LDA blocks, Y
+  LDA [levelBlocks], Y
   CMP playerPossibleCoorY
   BNE BlockLoopContinue ;Y pos different
   LDA #$00
@@ -656,11 +607,9 @@ BlockLoopContinue:
   INY
   INY
   INY
-  CPX #$03
+  CPX blocksAmount
   BNE BlockLoop
   RTS
-
-CheckNextPositionDone:
 
 CheckIfExit:
   LDA playerCoorX
@@ -669,10 +618,31 @@ CheckIfExit:
   LDA playerCoorY
   CMP exitY
   BNE CheckIfExitDone
-  LDA #$01
-  STA levelNumber
-  JMP LoadLevel
+  JSR LoadNxtLevel
 CheckIfExitDone:
+  RTS
+
+LoadNxtLevel:
+  LDA levelNumber
+  CLC
+  ADC #$01
+  STA levelNumber
+  ; reset player pos
+  LDA #$01
+  STA playerCoorX
+  STA playerCoorY
+  LDA #$B3
+  STA posy  
+  LDA #$6C
+  STA posx
+  ; turn PPU off
+  LDA #$00
+  STA $2001
+  ; draw new lvl
+  JSR LoadLevel
+  ; turn PPU on
+  LDA #%00011110   ; enable sprites, enable background, no clipping on left side
+  STA $2001
   RTS
 
 ReadController1:
@@ -702,7 +672,66 @@ ReadController2Loop:
   DEX
   BNE ReadController2Loop
   RTS  
+
+LoadLevel:
+  lda levelNumber ;gets the number of the current level
+	asl A ;multiplies it by 2 since each pointer is 2 bytes
+	tax ;use it as an index
+	lda spritesPointers+0, x ;copies the low byte to ZP
+	sta levelSprites+0
+	lda spritesPointers+1, x ;copies the high byte to ZP
+	sta levelSprites+1
+  LDY levelNumber
+  LDA spritesTotalPerLvl, y
+  STA spritesAmount
+  ; set blocks
+  lda blocksPointers+0, X
+  sta levelBlocks+0
+  lda blocksPointers+1, X
+  sta levelBlocks+1
+  LDA blocksTotalPerLvl, y
+  sta blocksAmount
+
+LoadSprites:
+  LDY #$00              ; start at 0
+LoadSpritesLoop:
+  LDA [levelSprites], y        ; load data from address (sprites +  x)
+  STA $0200, y          ; store into RAM address ($0200 + x)
+  INY                   ; X = X + 1
+  CPY spritesAmount     ; Compare X to hex $10, decimal 16
+  BNE LoadSpritesLoop   ; Branch to LoadSpritesLoop if compare was Not Equal to zero
+                        ; if compare was equal to 16, keep going down
+
+LoadBackground:
+  LDA $2002             ; read PPU status to reset the high/low latch
+  LDA #$20
+  STA $2006             ; write the high byte of $2000 address
+  LDA #$00
+  STA $2006             ; write the low byte of $2000 address
+
+  LDA #$00
+  STA pointerLo       ; put the low byte of the address of background into pointer
+  LDA #HIGH(background)
+  STA pointerHi       ; put the high byte of the address into pointer
   
+  LDX #$00            ; start at pointer + 0
+  LDY #$00
+OutsideLoop:
+  
+InsideLoop:
+  LDA [pointerLo], y  ; copy one background byte from address in pointer plus Y
+  STA $2007           ; this runs 256 * 4 times
+  
+  INY                 ; inside loop counter
+  CPY #$00
+  BNE InsideLoop      ; run the inside loop 256 times before continuing down
+  
+  INC pointerHi       ; low byte went 0 to 256, so high byte needs to be changed now
+  
+  INX
+  CPX #$04
+  BNE OutsideLoop     ; run the outside loop 256 times before continuing down
+  RTS
   
     
         
@@ -720,8 +749,8 @@ palette:
   .db $22,$29,$1A,$0F,  $22,$36,$17,$0F,  $22,$30,$21,$0F,  $22,$27,$17,$0F   ;;background palette
   .db $22,$13,$23,$33,  $22,$02,$38,$3C,  $22,$13,$23,$33,  $22,$02,$38,$3C   ;;sprite palette
 
-spritesTotalPerLvl:
-  .db $10, $0C
+spritesTotalPerLvl: ;valur multiplied by four because of attributes
+  .db $10, $0C, $26
 
 spritesLvl1:
      ;vert tile attr horiz
@@ -736,15 +765,49 @@ spritesLvl2:
   .db $83, $41, $00, $6C   ;sprite 1
   .db $8B, $41, $00, $9C   ;sprite 1
 
-blocks:
+spritesLvl3:
+     ;vert tile attr horiz
+  .db $80, $40, $00, $80   ;sprite 0
+  .db $83, $41, $00, $4C   ;sprite 1
+  .db $7B, $41, $00, $5C   ;sprite 1
+  .db $73, $41, $00, $6C   ;sprite 1
+  .db $6B, $41, $00, $7C   ;sprite 1
+  .db $93, $41, $00, $6C   ;sprite 1
+  .db $8B, $41, $00, $7C   ;sprite 1
+  .db $83, $41, $00, $8C   ;sprite 1
+  .db $7B, $41, $00, $9C   ;sprite 1
+
+blocksTotalPerLvl: ;no need to multiply, I'm jumping over extra values
+  .db $03, $02, $08
+
+blocksLvl1:
   .db $04, $04, $6C, $83
   .db $04, $06, $8C, $73
   .db $02, $05, $8C, $73
 
+blocksLvl2:
+  .db $04, $04, $6C, $83
+  .db $02, $05, $8C, $73
+
+blocksLvl3:
+  .db $05, $03, $6C, $83
+  .db $05, $04, $8C, $73
+  .db $05, $05, $8C, $73
+  .db $05, $06, $6C, $83
+  .db $03, $03, $8C, $73
+  .db $03, $04, $8C, $73
+  .db $03, $05, $6C, $83
+  .db $03, $06, $8C, $73
+
 spritesPointers:
   .dw spritesLvl1
   .dw spritesLvl2
+  .dw spritesLvl3
 
+blocksPointers:
+  .dw blocksLvl1
+  .dw blocksLvl2
+  .dw blocksLvl3
 
   .org $FFFA     ;first of the three vectors starts here
   .dw NMI        ;when an NMI happens (once per frame if enabled) the 
