@@ -141,9 +141,9 @@ LoadPalettesLoop:
   STA ballleft
   
   ; set screen player position
-  LDA #$B3
+  LDA #$A3
   STA posy  
-  LDA #$6C
+  LDA #$68
   STA posx
 
   ;TEST
@@ -547,11 +547,36 @@ ReadUpBtnDone:
   JMP GameEngineDone
 
 UpdateSprites:
-;update player sprites
   LDA posx
   STA PLAYERX
+  LDX #$08
+  STA PLAYERX, X
+  LDX #$10
+  STA PLAYERX, X
+  CLC
+  ADC #$08
+  LDX #$04
+  STA PLAYERX, X
+  LDX #$0C
+  STA PLAYERX, X
+  LDX #$14
+  STA PLAYERX, X
   LDA posy
   STA PLAYERY
+  LDX #$04
+  STA PLAYERY, X
+  CLC
+  ADC #$08
+  LDX #$08
+  STA PLAYERY, X
+  LDX #$0C
+  STA PLAYERY, X
+  CLC
+  ADC #$08
+  LDX #$10
+  STA PLAYERY, X
+  LDX #$14
+  STA PLAYERY, X
   ; LDA bally  ;;update all ball sprite info
   ; STA $0200
   
@@ -631,9 +656,9 @@ LoadNxtLevel:
   LDA #$01
   STA playerCoorX
   STA playerCoorY
-  LDA #$B3
+  LDA #$A3
   STA posy  
-  LDA #$6C
+  LDA #$68
   STA posx
   ; turn PPU off
   LDA #$00
@@ -747,27 +772,43 @@ background:
 
 palette:
   .db $22,$29,$1A,$0F,  $22,$36,$17,$0F,  $22,$30,$21,$0F,  $22,$27,$17,$0F   ;;background palette
-  .db $22,$13,$23,$33,  $22,$02,$38,$3C,  $22,$13,$23,$33,  $22,$02,$38,$3C   ;;sprite palette
+  .db $22,$13,$23,$33,  $22,$02,$38,$3C,  $22,$13,$23,$33,  $22,$1C,$20,$2B   ;;sprite palette
 
-spritesTotalPerLvl: ;valur multiplied by four because of attributes
-  .db $10, $0C, $26
+spritesTotalPerLvl: ;value multiplied by four because of attributes
+  .db $26, $20, $38
 
 spritesLvl1:
      ;vert tile attr horiz
-  .db $80, $40, $00, $80   ;sprite 0
+  .db $80, $50, $03, $80
+  .db $80, $51, $03, $88
+  .db $88, $60, $03, $80
+  .db $88, $61, $03, $88
+  .db $90, $70, $03, $80
+  .db $90, $71, $03, $88
+  ;.db $80, $40, $00, $80   ;sprite 0
   .db $83, $41, $00, $6C   ;sprite 1
   .db $73, $41, $00, $8C   ;sprite 1
   .db $8B, $41, $00, $9C   ;sprite 1
 
 spritesLvl2:
      ;vert tile attr horiz
-  .db $80, $40, $00, $80   ;sprite 0
+  .db $80, $50, $03, $80
+  .db $80, $51, $03, $88
+  .db $88, $60, $03, $80
+  .db $88, $61, $03, $88
+  .db $90, $70, $03, $80
+  .db $90, $71, $03, $88
   .db $83, $41, $00, $6C   ;sprite 1
   .db $8B, $41, $00, $9C   ;sprite 1
 
 spritesLvl3:
      ;vert tile attr horiz
-  .db $80, $40, $00, $80   ;sprite 0
+  .db $80, $50, $03, $80
+  .db $80, $51, $03, $88
+  .db $88, $60, $03, $80
+  .db $88, $61, $03, $88
+  .db $90, $70, $03, $80
+  .db $90, $71, $03, $88
   .db $83, $41, $00, $4C   ;sprite 1
   .db $7B, $41, $00, $5C   ;sprite 1
   .db $73, $41, $00, $6C   ;sprite 1
