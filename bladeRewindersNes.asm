@@ -36,6 +36,7 @@ score1     .rs 1  ; player 1 score, 0-15
 score2     .rs 1  ; player 2 score, 0-15
 levelNumber .rs 1 ; level number 0-?
 levelSprites .rs 2; two bytes pointer/address
+levelBackground .rs 2; two bytes pointer for BG
 spritesAmount .rs 1; total number of sprites on a level
 levelBlocks .rs 2; two bytes pointer for blocks, is required pointer for each type?
 blocksAmount .rs 1; total number of blocks per level, used to limit loop
@@ -716,6 +717,11 @@ LoadLevel:
   sta levelBlocks+1
   LDA blocksTotalPerLvl, y
   sta blocksAmount
+  ;set bg
+  lda bgLevelsPointers+0, X
+  sta levelBackground+0
+  lda bgLevelsPointers+1, X
+  sta levelBackground+1
 
 LoadSprites:
   LDY #$00              ; start at 0
@@ -734,9 +740,11 @@ LoadBackground:
   LDA #$00
   STA $2006             ; write the low byte of $2000 address
 
-  LDA #$00
+  ; LDA #$00
+  LDA levelBackground+0
   STA pointerLo       ; put the low byte of the address of background into pointer
-  LDA #HIGH(background)
+  ;LDA #HIGH(levelBackground)
+  LDA levelBackground+1
   STA pointerHi       ; put the high byte of the address into pointer
   
   LDX #$00            ; start at pointer + 0
@@ -767,15 +775,21 @@ InsideLoop:
   .bank 1
   .org $E000
 
-background:
-  incbin "bladerewindertest.nam"
+bglvl01:
+  incbin "bladeRewinderslvl01.nam"
+
+bglvl02:
+  incbin "bladeRewinderslvl02.nam"
+
+bglvl03:
+  incbin "bladeRewinderslvl03.nam"
 
 palette:
   .db $22,$29,$1A,$0F,  $22,$36,$17,$0F,  $22,$30,$21,$0F,  $22,$27,$17,$0F   ;;background palette
   .db $22,$13,$23,$33,  $22,$02,$38,$3C,  $22,$13,$23,$33,  $22,$1C,$20,$2B   ;;sprite palette
 
 spritesTotalPerLvl: ;value multiplied by four because of attributes
-  .db $26, $20, $38
+  .db $18, $18, $18
 
 spritesLvl1:
      ;vert tile attr horiz
@@ -786,9 +800,9 @@ spritesLvl1:
   .db $90, $70, $03, $80
   .db $90, $71, $03, $88
   ;.db $80, $40, $00, $80   ;sprite 0
-  .db $83, $41, $00, $6C   ;sprite 1
-  .db $73, $41, $00, $8C   ;sprite 1
-  .db $8B, $41, $00, $9C   ;sprite 1
+  ; .db $83, $41, $00, $6C   ;sprite 1
+  ; .db $73, $41, $00, $8C   ;sprite 1
+  ; .db $8B, $41, $00, $9C   ;sprite 1
 
 spritesLvl2:
      ;vert tile attr horiz
@@ -798,8 +812,8 @@ spritesLvl2:
   .db $88, $61, $03, $88
   .db $90, $70, $03, $80
   .db $90, $71, $03, $88
-  .db $83, $41, $00, $6C   ;sprite 1
-  .db $8B, $41, $00, $9C   ;sprite 1
+  ; .db $83, $41, $00, $6C   ;sprite 1
+  ; .db $8B, $41, $00, $9C   ;sprite 1
 
 spritesLvl3:
      ;vert tile attr horiz
@@ -809,36 +823,55 @@ spritesLvl3:
   .db $88, $61, $03, $88
   .db $90, $70, $03, $80
   .db $90, $71, $03, $88
-  .db $83, $41, $00, $4C   ;sprite 1
-  .db $7B, $41, $00, $5C   ;sprite 1
-  .db $73, $41, $00, $6C   ;sprite 1
-  .db $6B, $41, $00, $7C   ;sprite 1
-  .db $93, $41, $00, $6C   ;sprite 1
-  .db $8B, $41, $00, $7C   ;sprite 1
-  .db $83, $41, $00, $8C   ;sprite 1
-  .db $7B, $41, $00, $9C   ;sprite 1
+  ; .db $83, $41, $00, $4C   ;sprite 1
+  ; .db $7B, $41, $00, $5C   ;sprite 1
+  ; .db $73, $41, $00, $6C   ;sprite 1
+  ; .db $6B, $41, $00, $7C   ;sprite 1
+  ; .db $93, $41, $00, $6C   ;sprite 1
+  ; .db $8B, $41, $00, $7C   ;sprite 1
+  ; .db $83, $41, $00, $8C   ;sprite 1
+  ; .db $7B, $41, $00, $9C   ;sprite 1
 
 blocksTotalPerLvl: ;no need to multiply, I'm jumping over extra values
-  .db $03, $02, $08
+  .db $05, $0A, $0B
 
 blocksLvl1:
-  .db $04, $04, $6C, $83
-  .db $04, $06, $8C, $73
+      ;x   y
+  .db $02, $02, $6C, $83
+  .db $04, $02, $8C, $73
+  .db $04, $04, $8C, $73
+  .db $04, $06, $6C, $83
   .db $02, $05, $8C, $73
 
 blocksLvl2:
-  .db $04, $04, $6C, $83
-  .db $02, $05, $8C, $73
+  .db $03, $02, $6C, $83
+  .db $03, $03, $8C, $73
+  .db $03, $04, $6C, $83
+  .db $03, $05, $8C, $73
+  .db $03, $06, $8C, $73
+  .db $05, $02, $6C, $83
+  .db $05, $03, $8C, $73
+  .db $05, $04, $6C, $83
+  .db $05, $05, $8C, $73
+  .db $05, $06, $8C, $73
 
 blocksLvl3:
-  .db $05, $03, $6C, $83
-  .db $05, $04, $8C, $73
-  .db $05, $05, $8C, $73
-  .db $05, $06, $6C, $83
-  .db $03, $03, $8C, $73
-  .db $03, $04, $8C, $73
-  .db $03, $05, $6C, $83
-  .db $03, $06, $8C, $73
+  .db $02, $01, $6C, $83
+  .db $02, $02, $8C, $73
+  .db $02, $03, $8C, $73
+  .db $02, $04, $6C, $83
+  .db $02, $05, $8C, $73
+  .db $04, $01, $8C, $73
+  .db $04, $02, $6C, $83
+  .db $04, $03, $8C, $73
+  .db $04, $04, $8C, $73
+  .db $04, $06, $6C, $83
+  .db $04, $07, $8C, $73
+
+bgLevelsPointers:
+  .dw bglvl01
+  .dw bglvl02
+  .dw bglvl03
 
 spritesPointers:
   .dw spritesLvl1
