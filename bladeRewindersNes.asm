@@ -6,7 +6,7 @@
 
 ;;;;;;;;;;;;;;;
 
-;; DECLARE SOME VARIABLES HERE
+;; DECLARE SOME VARIABLES HERE and here
   .rsset $0000  ;;start variables at ram location 0
   
 pointerLo  .rs 1   ; pointer variables are declared in RAM
