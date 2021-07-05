@@ -42,11 +42,36 @@ levelBlocks .rs 2; two bytes pointer for blocks, is required pointer for each ty
 blocksAmount .rs 1; total number of blocks per level, used to limit loop
 exitX     .rs 1
 exitY     .rs 1
-;test
-blockX  .rs 1
-blockY  .rs 1
-blockCoorX  .rs 1
-blockCoorY  .rs 1
+brOnePosX .rs 1
+brOnePosY .rs 1
+brOneCoorX .rs 1
+brOneCoorY .rs 1
+brPossibleUp .rs 1
+brPossibleLeft .rs 1
+brPossibleDown .rs 1
+brPossibleRight  .rs 1
+brRemainderUp  .rs 1
+brRemainderLeft  .rs 1
+brRemainderDown  .rs 1
+brRemainderRight .rs 1
+playerCoorSum .rs 1
+brSmallerDistance .rs 1
+brNextMove .rs 1
+;multiplication and square root
+xone .rs 1
+yone .rs 1
+xtwo .rs 1
+ytwo .rs 1
+rootRegisterD .rs 1
+rootRegisterE .rs 1
+rootRemainder .rs 1
+rootResult .rs 1
+multResultOne .rs 1
+multResultTwo .rs 1
+multIterations .rs 1
+
+
+
 
 
 ;; DECLARE SOME CONSTANTS HERE
@@ -66,6 +91,9 @@ PLAYERY        = $0200
 PLAYERX        = $0203
 PLAYERHMOV     = $10
 PLAYERYMOV     = $08
+
+BRONEY         = $0218
+BRONEX         = $021B
 
 ;;;;;;;;;;;;;;;;;;
 
@@ -146,6 +174,15 @@ LoadPalettesLoop:
   STA posy  
   LDA #$68
   STA posx
+
+  ;set br start pos
+  LDA #$63
+  STA brOnePosY  
+  LDA #$6C
+  STA brOnePosX
+  LDA #$06
+  STA brOneCoorX
+  STA brOneCoorY
 
   ;TEST
   ; LDA #$83
@@ -395,6 +432,8 @@ ReadLeftBtn:
   LDA playerCoorX
   ADC #$01
   STA playerCoorX
+  ; test move BR ONE
+  JSR MoveBROne
   ; LDA ballspeedx
   ; CMP #$00
   ; BEQ IncSpeed
@@ -452,6 +491,8 @@ ReadRightBtn:
   SEC
   SBC #$01
   STA playerCoorX
+  ; test move BR ONE
+  JSR MoveBROne
 ReadRightBtnDone:
   ;LDA buttons1
   ; AND #%11111110
@@ -496,6 +537,8 @@ ReadDownBtn:
   SEC
   SBC #$01
   STA playerCoorY
+  ; test move BR ONE
+  JSR MoveBROne
 ReadDownBtnDone:
   ; LDA buttons1
   ; EOR #$04
@@ -536,6 +579,8 @@ ReadUpBtn:
   LDA playerCoorY
   ADC #$01
   STA playerCoorY
+  ; test move BR ONE
+  JSR MoveBROne
 ReadUpBtnDone:
   ; LDA buttons1
   ; EOR #$08
@@ -578,33 +623,13 @@ UpdateSprites:
   STA PLAYERY, X
   LDX #$14
   STA PLAYERY, X
-  ; LDA bally  ;;update all ball sprite info
-  ; STA $0200
-  
-  ; LDA #$00
-  ; STA $0201
-  
-  ; LDA #$00
-  ; STA $0202
-  
-  ; LDA ballx
-  ; STA $0203
 
-  ; LDA bally  
-  ; STA $0204
+  ;; UPDATE BR sprites
+  LDA brOnePosX
+  STA BRONEX
+  LDA brOnePosY
+  STA BRONEY
   
-  ; LDA #$01
-  ; STA $0205
-  
-  ; LDA #$00
-  ; STA $0206
-  
-  ; clc
-  ; lda ballx
-  ; adc #$08 
-  ; STA $0207
-  
-  ;;update paddle sprites
   RTS
  
 DrawScore:
@@ -627,7 +652,7 @@ BlockLoop:
   CMP playerPossibleCoorY
   BNE BlockLoopContinue ;Y pos different
   LDA #$00
-  STA canMove
+  STA canMove ; player wont move
   RTS
 BlockLoopContinue:
   INY
@@ -635,6 +660,209 @@ BlockLoopContinue:
   INY
   CPX blocksAmount
   BNE BlockLoop
+  RTS
+
+; MoveBROne:
+;   CLC
+;   LDA brOnePosY
+;   ADC #PLAYERYMOV
+;   STA brOnePosY
+;   LDA brOnePosX
+;   CLC
+;   SEC             
+;   SBC #PLAYERHMOV
+;   STA brOnePosX
+;   LDA brOneCoorY
+;   SEC
+;   SBC #$01
+;   STA brOneCoorY
+;   RTS
+
+MoveBROne:
+  CLC
+  ;get br Y for UP
+  LDA brOneCoorY
+  ADC #$01
+  STA xone
+  LDA brOneCoorX
+  STA yone
+  JSR CalculateDistance
+
+
+  ;check up movement
+  LDA brOneCoorY
+  ADC #$01
+  ADC brOneCoorX
+  ADC playerCoorSum
+  STA brPossibleUp
+  ;check right movement
+  LDA brOneCoorX
+  SEC
+  SBC #$01
+  CLC
+  ADC brOneCoorY
+  ADC playerCoorSum
+  STA brPossibleRight
+  ;check down movement
+  LDA brOneCoorY
+  SEC
+  SBC #$01
+  CLC
+  ADC brOneCoorX
+  ADC playerCoorSum
+  STA brPossibleDown
+  ;check left movement
+  LDA brOneCoorX
+  ADC #$01
+  ADC brOneCoorY
+  ADC playerCoorSum
+  STA brPossibleLeft
+  ; save up as minor
+  LDA brPossibleUp
+  STA brSmallerDistance
+  ; step 1 start comparing values
+  ; compare minor to left
+; StartComparing:
+;   LDA brPossibleLeft
+;   SBC brSmallerDistance
+;   BMI SaveLeftAsMinorDistance
+;     ; if negative flag branch to saveMinor
+;   ; compare minor to down
+;   LDA brPossibleDown
+;   SBC brSmallerDistance
+;   BMI SaveDownAsMinorDistance
+;     ; if negative flag branch to saveMinor
+;   ; compare minor to right
+;   LDA brPossibleRight
+;   SBC brSmallerDistance
+;   BMI SaveRightAsMinorDistance
+;   JMP ComparingDone ;smaller value was found or up was smaller and never branched
+;     ; if negative flag branch to saveMinor
+;   ;if minor has been found, jump to comparingDone
+;   ;save minor= STA minorValue, branch to step1
+StartComparing:
+  LDA brSmallerDistance
+  SBC brPossibleLeft
+  BPL SaveLeftAsMinorDistance
+    ; if negative flag branch to saveMinor
+  ; compare minor to down
+  LDA brSmallerDistance
+  SBC brPossibleDown
+  BPL SaveDownAsMinorDistance
+    ; if negative flag branch to saveMinor
+  ; compare minor to right
+  LDA brSmallerDistance
+  SBC brPossibleRight
+  BPL SaveRightAsMinorDistance
+  JMP ComparingDone ;smaller value was found or up was smaller and never branched
+    ; if negative flag branch to saveMinor
+  ;if minor has been found, jump to comparingDone
+  ;save minor= STA minorValue, branch to step1
+SaveLeftAsMinorDistance:
+  LDA brPossibleLeft
+  STA brSmallerDistance
+  JMP StartComparing
+SaveDownAsMinorDistance:
+  LDA brPossibleDown
+  STA brSmallerDistance
+  JMP StartComparing
+SaveRightAsMinorDistance:
+  LDA brPossibleRight
+  STA brSmallerDistance
+  JMP StartComparing
+ComparingDone:
+  LDA brSmallerDistance
+  ;comparingDone
+  ;get direction
+    ;compare minorValue to up
+  CMP brPossibleUp
+  BEQ MoveBRUp
+  CMP brPossibleLeft
+  BEQ MoveBRLeft
+  CMP brPossibleDown
+  BEQ MoveBRDown
+  CMP brPossibleRight
+  BEQ MoveBRRight
+MoveBRUp:
+  CLC
+  LDA brOnePosY
+  SEC
+  SBC #PLAYERYMOV
+  STA brOnePosY
+  LDA brOnePosX          
+  ADC #PLAYERHMOV
+  STA brOnePosX
+  LDA brOneCoorY
+  ADC #$01
+  STA brOneCoorY
+  JMP MoveDone
+MoveBRLeft:
+  CLC
+  LDA brOnePosX
+  ADC #PLAYERHMOV
+  STA brOnePosX
+  LDA brOnePosY
+  SEC      
+  SBC #PLAYERYMOV
+  STA brOnePosY
+  LDA brOneCoorX
+  ADC #$01
+  STA brOneCoorX
+  JMP MoveDone
+MoveBRDown:
+  CLC
+  LDA brOnePosY
+  ADC #PLAYERYMOV
+  STA brOnePosY
+  LDA brOnePosX
+  SEC      
+  SBC #PLAYERHMOV
+  STA brOnePosX
+  LDA brOneCoorY
+  SEC
+  SBC #$01
+  STA brOneCoorY
+  JMP MoveDone
+MoveBRRight:
+  CLC
+  LDA brOnePosX
+  SEC
+  SBC #PLAYERHMOV
+  STA brOnePosX
+  LDA brOnePosY          
+  ADC #PLAYERYMOV
+  STA brOnePosY
+  LDA brOneCoorX
+  SEC
+  SBC #$01
+  STA brOneCoorX
+  JMP MoveDone
+MoveDone:
+      ; if is the same, set direction to up (1=up, 2=left, 3=down, 4=right)
+    ;compare minorValue to left
+    ;compare minorValue to down
+    ;compare minorValue to right
+  
+  
+  
+  ; CLC
+  ; LDA brPossibleUp
+  ; SBC brPossibleLeft
+  ; BMI UpdateSmallerValue
+
+; GetDistanceResult:
+;   LDX #$00
+;   LDA [brPossibleUp],X
+;   STA brSmallerDistance
+; GetDistanceResultLoop:
+;   CLC
+;   LDA [brPossibleUp],X
+;   SBC brPossibleLeft
+;   BMI UpdateSmallerValue
+; UpdateSmallerValue:
+;   INX 
+;   STX brSmallerDistance
+
   RTS
 
 CheckIfExit:
@@ -766,8 +994,31 @@ InsideLoop:
   BNE OutsideLoop     ; run the outside loop 256 times before continuing down
   RTS
   
-    
-        
+;;;;;;;;;;;;;
+; SQR ROUTINE
+ LDA #$01
+ STA $0002 ;D
+ STA $0003 ;E
+ LDA #$12
+Loop: 
+ SEC
+ SBC $0002
+ CMP #$00
+ BEQ Result
+ LDX $0002
+ INX
+ INX
+ STX $0002
+ CMP $0002
+ BCC Result
+ LDX $0003
+ INX
+ STX $0003
+ JMP Loop 	
+Result:
+ STA $0005 ; remanent
+ LDA $0003
+ STA $0004 ;result 
 ;;;;;;;;;;;;;;  
   
   
@@ -789,7 +1040,7 @@ palette:
   .db $22,$13,$23,$33,  $22,$02,$38,$3C,  $22,$13,$23,$33,  $22,$1C,$20,$2B   ;;sprite palette
 
 spritesTotalPerLvl: ;value multiplied by four because of attributes
-  .db $18, $18, $18
+  .db $1C, $18, $18
 
 spritesLvl1:
      ;vert tile attr horiz
@@ -799,7 +1050,7 @@ spritesLvl1:
   .db $88, $61, $03, $88
   .db $90, $70, $03, $80
   .db $90, $71, $03, $88
-  ;.db $80, $40, $00, $80   ;sprite 0
+  .db $63, $40, $00, $6C   ;sprite 0
   ; .db $83, $41, $00, $6C   ;sprite 1
   ; .db $73, $41, $00, $8C   ;sprite 1
   ; .db $8B, $41, $00, $9C   ;sprite 1
