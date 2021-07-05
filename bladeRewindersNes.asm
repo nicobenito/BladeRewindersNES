@@ -21,19 +21,9 @@ playerPossibleCoorY .rs 1 ; next move
 canMove   .rs 1 ; flag
 boardLength .rs 1
 boardHeight .rs 1
-ballup     .rs 1  ; 1 = ball moving up
-balldown   .rs 1  ; 1 = ball moving down
-ballleft   .rs 1  ; 1 = ball moving left
-ballright  .rs 1  ; 1 = ball moving right
-ballspeedx .rs 1  ; ball horizontal speed per frame
-ballspeedy .rs 1  ; ball vertical speed per frame
-paddle1ytop   .rs 1  ; player 1 paddle top vertical position
-paddle2ybot   .rs 1  ; player 2 paddle bottom vertical position
 buttons1   .rs 1  ; player 1 gamepad buttons, one bit per button
 buttons2   .rs 1  ; player 2 gamepad buttons, one bit per button
 buttons1pre .rs 1; player 1 pre state for release
-score1     .rs 1  ; player 1 score, 0-15
-score2     .rs 1  ; player 2 score, 0-15
 levelNumber .rs 1 ; level number 0-?
 levelSprites .rs 2; two bytes pointer/address
 levelBackground .rs 2; two bytes pointer for BG
@@ -50,13 +40,11 @@ brPossibleUp .rs 1
 brPossibleLeft .rs 1
 brPossibleDown .rs 1
 brPossibleRight  .rs 1
-brRemainderUp  .rs 1
-brRemainderLeft  .rs 1
-brRemainderDown  .rs 1
-brRemainderRight .rs 1
-playerCoorSum .rs 1
+; brRemanentUp  .rs 1
+; brRemanentLeft  .rs 1
+; brRemanentDown  .rs 1
+; brRemanentRight .rs 1
 brSmallerDistance .rs 1
-brNextMove .rs 1
 ;multiplication and square root
 xone .rs 1
 yone .rs 1
@@ -164,14 +152,6 @@ LoadPalettesLoop:
   STA levelNumber
 
   JSR LoadLevel
-
-;;;Set some initial ball stats
-  LDA #$01
-  STA balldown
-  STA ballright
-  LDA #$00
-  STA ballup
-  STA ballleft
   
   ; set screen player position
   LDA #$A3
@@ -207,10 +187,6 @@ LoadPalettesLoop:
   STA boardHeight
   LDA #$06
   STA boardLength
-  
-  LDA #$02
-  STA ballspeedx
-  STA ballspeedy
 
   LDA #$06
   STA exitX
