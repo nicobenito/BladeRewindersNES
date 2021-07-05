@@ -62,13 +62,17 @@ xone .rs 1
 yone .rs 1
 xtwo .rs 1
 ytwo .rs 1
+xTotal .rs 1
+yTotal .rs 1
 rootRegisterD .rs 1
+numberToRoot .rs 1
 rootRegisterE .rs 1
-rootRemainder .rs 1
+rootRemanent .rs 1
 rootResult .rs 1
+multTempResult .rs 1
 multResultOne .rs 1
 multResultTwo .rs 1
-multIterations .rs 1
+numberToMult .rs 1
 
 
 
@@ -680,43 +684,77 @@ BlockLoopContinue:
 
 MoveBROne:
   CLC
-  ;get br Y for UP
+  ;Get BR possible UP distance result
   LDA brOneCoorY
+  ADC #$01
+  STA yone
+  LDA brOneCoorX
+  STA xone
+  JSR CalculateDistance
+  LDA rootResult
+  STA brPossibleUp ;save result as UP result
+  ;Get BR possible LEFT distance result
+  LDA brOneCoorX
+  CLC
   ADC #$01
   STA xone
-  LDA brOneCoorX
+  LDA brOneCoorY
   STA yone
   JSR CalculateDistance
-
-
-  ;check up movement
-  LDA brOneCoorY
-  ADC #$01
-  ADC brOneCoorX
-  ADC playerCoorSum
-  STA brPossibleUp
-  ;check right movement
-  LDA brOneCoorX
-  SEC
-  SBC #$01
-  CLC
-  ADC brOneCoorY
-  ADC playerCoorSum
-  STA brPossibleRight
-  ;check down movement
-  LDA brOneCoorY
-  SEC
-  SBC #$01
-  CLC
-  ADC brOneCoorX
-  ADC playerCoorSum
-  STA brPossibleDown
-  ;check left movement
-  LDA brOneCoorX
-  ADC #$01
-  ADC brOneCoorY
-  ADC playerCoorSum
+  LDA rootResult
   STA brPossibleLeft
+  ;Get BR possible DOWN distance result
+  LDA brOneCoorY
+  SEC
+  SBC #$01
+  STA yone
+  LDA brOneCoorX
+  STA xone
+  JSR CalculateDistance
+  LDA rootResult
+  STA brPossibleDown
+  ;Get BR possible RIGHT distance result
+  LDA brOneCoorX
+  SEC
+  SBC #$01
+  STA xone
+  LDA brOneCoorY
+  STA yone
+  JSR CalculateDistance
+  LDA rootResult
+  STA brPossibleRight
+
+
+  ; ;check up movement
+  ; LDA brOneCoorY
+  ; ADC #$01
+  ; ADC brOneCoorX
+  ; ADC playerCoorSum
+  ; STA brPossibleUp
+  ; ;check right movement
+  ; LDA brOneCoorX
+  ; SEC
+  ; SBC #$01
+  ; CLC
+  ; ADC brOneCoorY
+  ; ADC playerCoorSum
+  ; STA brPossibleRight
+  ; ;check down movement
+  ; LDA brOneCoorY
+  ; SEC
+  ; SBC #$01
+  ; CLC
+  ; ADC brOneCoorX
+  ; ADC playerCoorSum
+  ; STA brPossibleDown
+  ; ;check left movement
+  ; LDA brOneCoorX
+  ; ADC #$01
+  ; ADC brOneCoorY
+  ; ADC playerCoorSum
+  ; STA brPossibleLeft
+
+
   ; save up as minor
   LDA brPossibleUp
   STA brSmallerDistance
@@ -741,19 +779,23 @@ MoveBROne:
 ;   ;if minor has been found, jump to comparingDone
 ;   ;save minor= STA minorValue, branch to step1
 StartComparing:
-  LDA brSmallerDistance
-  SBC brPossibleLeft
-  BPL SaveLeftAsMinorDistance
+  LDA brPossibleLeft
+  SEC
+  SBC brSmallerDistance
+  BMI SaveLeftAsMinorDistance
+
     ; if negative flag branch to saveMinor
   ; compare minor to down
-  LDA brSmallerDistance
-  SBC brPossibleDown
-  BPL SaveDownAsMinorDistance
+  LDA brPossibleDown
+  SEC
+  SBC brSmallerDistance
+  BMI SaveDownAsMinorDistance
     ; if negative flag branch to saveMinor
   ; compare minor to right
-  LDA brSmallerDistance
-  SBC brPossibleRight
-  BPL SaveRightAsMinorDistance
+  LDA brPossibleRight
+  SEC
+  SBC brSmallerDistance
+  BMI SaveRightAsMinorDistance
   JMP ComparingDone ;smaller value was found or up was smaller and never branched
     ; if negative flag branch to saveMinor
   ;if minor has been found, jump to comparingDone
@@ -784,28 +826,30 @@ ComparingDone:
   CMP brPossibleRight
   BEQ MoveBRRight
 MoveBRUp:
-  CLC
   LDA brOnePosY
   SEC
   SBC #PLAYERYMOV
   STA brOnePosY
-  LDA brOnePosX          
+  LDA brOnePosX
+  CLC       
   ADC #PLAYERHMOV
   STA brOnePosX
   LDA brOneCoorY
+  CLC
   ADC #$01
   STA brOneCoorY
   JMP MoveDone
 MoveBRLeft:
-  CLC
   LDA brOnePosX
-  ADC #PLAYERHMOV
+  SEC
+  SBC #PLAYERHMOV
   STA brOnePosX
   LDA brOnePosY
   SEC      
   SBC #PLAYERYMOV
   STA brOnePosY
   LDA brOneCoorX
+  CLC
   ADC #$01
   STA brOneCoorX
   JMP MoveDone
@@ -824,12 +868,12 @@ MoveBRDown:
   STA brOneCoorY
   JMP MoveDone
 MoveBRRight:
-  CLC
   LDA brOnePosX
-  SEC
-  SBC #PLAYERHMOV
+  CLC
+  ADC #PLAYERHMOV
   STA brOnePosX
-  LDA brOnePosY          
+  LDA brOnePosY   
+  CLC       
   ADC #PLAYERYMOV
   STA brOnePosY
   LDA brOneCoorX
@@ -865,6 +909,67 @@ MoveDone:
 
   RTS
 
+CalculateDistance:
+  ;formula: sqr((Xa - Xb)^2 + (Ya - Yb)^2)
+  ;calculate X and Y and sum
+  LDA xone
+  SEC
+  SBC playerCoorX
+  STA xTotal
+  ; check if negative to get difference with #$00
+  BPL DoneWithSubtractX
+  LDA #$00
+  SEC
+  SBC #$fe
+  STA xTotal
+DoneWithSubtractX:
+  LDA yone
+  SEC
+  SBC playerCoorY
+  STA yTotal
+  BPL DoneWithSubtractY
+  LDA #$00
+  SEC
+  SBC #$fe
+  STA yTotal
+DoneWithSubtractY:
+  ; exponential x
+  LDA xTotal
+  STA numberToMult
+  JSR DistanceMultiplication
+  LDA multTempResult
+  STA multResultOne
+  ; exponential Y
+  LDA yTotal
+  STA numberToMult
+  JSR DistanceMultiplication
+  LDA multTempResult
+  STA multResultTwo
+  ; sum results and sqr root
+  LDA multResultOne
+  CLC
+  ADC multResultTwo
+  STA numberToRoot
+  ;calculate sqr root
+  JSR SQRCalculation
+  ;; ############ TESTING
+  ; LDA xTotal
+  ; CLC
+  ; ADC yTotal
+  ; STA rootResult
+  RTS
+
+DistanceMultiplication:
+  LDX #$01
+  MultLoop:
+  CLC
+  ADC numberToMult
+  INX
+  CPX numberToMult
+  BNE MultLoop
+  STA multTempResult
+  RTS
+ 
 CheckIfExit:
   LDA playerCoorX
   CMP exitX
@@ -996,29 +1101,31 @@ InsideLoop:
   
 ;;;;;;;;;;;;;
 ; SQR ROUTINE
+SQRCalculation:
  LDA #$01
- STA $0002 ;D
- STA $0003 ;E
- LDA #$12
+ STA rootRegisterD ;D
+ STA rootRegisterE ;E
+ LDA numberToRoot
 Loop: 
  SEC
- SBC $0002
+ SBC rootRegisterD
  CMP #$00
  BEQ Result
- LDX $0002
+ LDX rootRegisterD
  INX
  INX
- STX $0002
- CMP $0002
+ STX rootRegisterD
+ CMP rootRegisterD
  BCC Result
- LDX $0003
+ LDX rootRegisterE
  INX
- STX $0003
+ STX rootRegisterE
  JMP Loop 	
 Result:
- STA $0005 ; remanent
- LDA $0003
- STA $0004 ;result 
+ STA rootRemanent ; remanent
+ LDA rootRegisterE
+ STA rootResult ;result 
+ RTS
 ;;;;;;;;;;;;;;  
   
   
