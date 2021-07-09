@@ -888,6 +888,8 @@ Loop:
 Result:
  STA rootRemanent ; remanent
  LDA rootRegisterE
+ ASL A
+ ASL A
  CLC
  ADC rootRemanent
  STA rootResult ;result 
