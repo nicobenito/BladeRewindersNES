@@ -40,10 +40,6 @@ brPossibleUp .rs 1
 brPossibleLeft .rs 1
 brPossibleDown .rs 1
 brPossibleRight  .rs 1
-; brRemanentUp  .rs 1
-; brRemanentLeft  .rs 1
-; brRemanentDown  .rs 1
-; brRemanentRight .rs 1
 brSmallerDistance .rs 1
 ;multiplication and square root
 xone .rs 1
@@ -70,14 +66,6 @@ numberToMult .rs 1
 STATETITLE     = $00  ; displaying title screen
 STATEPLAYING   = $01  ; move paddles/ball, check for collisions
 STATEGAMEOVER  = $02  ; displaying game over screen
-  
-RIGHTWALL      = $F4  ; when ball reaches one of these, do something
-TOPWALL        = $20
-BOTTOMWALL     = $E0
-LEFTWALL       = $04
-  
-PADDLE1X       = $08  ; horizontal position for paddles, doesnt move
-PADDLE2X       = $F0
 
 PLAYERY        = $0200
 PLAYERX        = $0203
@@ -86,6 +74,7 @@ PLAYERYMOV     = $08
 
 BRONEY         = $0218
 BRONEX         = $021B
+CANTMOVE       = $10
 
 ;;;;;;;;;;;;;;;;;;
 
@@ -168,16 +157,6 @@ LoadPalettesLoop:
   STA brOneCoorX
   STA brOneCoorY
 
-  ;TEST
-  ; LDA #$83
-  ; STA blockY
-  ; LDA #$6C
-  ; STA blockX
-  ; ;block coors
-  ; LDA #$04
-  ; STA blockCoorX
-  ; STA blockCoorY
-
   ;set coordinates
   LDA #$01
   STA playerCoorX
@@ -247,14 +226,9 @@ GameEngine:
   BEQ EnginePlaying   ;;game is playing
 GameEngineDone:  
   
-  JSR UpdateSprites  ;;set ball/paddle sprites from positions
+  JSR UpdateSprites  
 
   RTI             ; return from interrupt
- 
- 
- 
- 
-;;;;;;;;
  
 EngineTitle:
   ;;if start button pressed
@@ -278,102 +252,6 @@ EngineGameOver:
 ;;;;;;;;;;;
  
 EnginePlaying:
-
-; MoveBallRight:
-;   LDA ballright
-;   BEQ MoveBallRightDone   ;;if ballright=0, skip this section
-
-;   LDA ballx
-;   CLC
-;   ADC ballspeedx        ;;ballx position = ballx + ballspeedx
-;   STA ballx
-
-;   LDA ballx
-;   CMP #RIGHTWALL
-;   BCC MoveBallRightDone      ;;if ball x < right wall, still on screen, skip next section
-;   LDA #$00
-;   STA ballright
-;   LDA #$01
-;   STA ballleft         ;;bounce, ball now moving left
-;   ;;in real game, give point to player 1, reset ball
-; MoveBallRightDone:
-
-
-; MoveBallLeft:
-;   LDA ballleft
-;   BEQ MoveBallLeftDone   ;;if ballleft=0, skip this section
-
-;   LDA ballx
-;   SEC
-;   SBC ballspeedx        ;;ballx position = ballx - ballspeedx
-;   STA ballx
-
-;   LDA ballx
-;   CMP #LEFTWALL
-;   BCS MoveBallLeftDone      ;;if ball x > left wall, still on screen, skip next section
-;   LDA #$01
-;   STA ballright
-;   LDA #$00
-;   STA ballleft         ;;bounce, ball now moving right
-;   ;;in real game, give point to player 2, reset ball
-; MoveBallLeftDone:
-
-
-; MoveBallUp:
-;   LDA ballup
-;   BEQ MoveBallUpDone   ;;if ballup=0, skip this section
-
-;   LDA bally
-;   SEC
-;   SBC ballspeedy        ;;bally position = bally - ballspeedy
-;   STA bally
-
-;   LDA bally
-;   CMP #TOPWALL
-;   BCS MoveBallUpDone      ;;if ball y > top wall, still on screen, skip next section
-;   LDA #$01
-;   STA balldown
-;   LDA #$00
-;   STA ballup         ;;bounce, ball now moving down
-; MoveBallUpDone:
-
-
-; MoveBallDown:
-;   LDA balldown
-;   BEQ MoveBallDownDone   ;;if ballup=0, skip this section
-
-;   LDA bally
-;   CLC
-;   ADC ballspeedy        ;;bally position = bally + ballspeedy
-;   STA bally
-
-;   LDA bally
-;   CMP #BOTTOMWALL
-;   BCC MoveBallDownDone      ;;if ball y < bottom wall, still on screen, skip next section
-;   LDA #$00
-;   STA balldown
-;   LDA #$01
-;   STA ballup         ;;bounce, ball now moving down
-; MoveBallDownDone:
-
-MovePaddleUp:
-  ;;if up button pressed
-  ;;  if paddle top > top wall
-  ;;    move paddle top and bottom up
-MovePaddleUpDone:
-
-MovePaddleDown:
-  ;;if down button pressed
-  ;;  if paddle bottom < bottom wall
-  ;;    move paddle top and bottom down
-MovePaddleDownDone:
-  
-CheckPaddleCollision:
-  ;;if ball x < paddle1x
-  ;;  if ball y > paddle y top
-  ;;    if ball y < paddle y bottom
-  ;;      bounce, ball now moving left
-CheckPaddleCollisionDone:
 
 ReadLeftBtn:
   LDA buttons1
@@ -414,25 +292,7 @@ ReadLeftBtn:
   STA playerCoorX
   ; test move BR ONE
   JSR MoveBROne
-  ; LDA ballspeedx
-  ; CMP #$00
-  ; BEQ IncSpeed
-  ; CLC
-  ; BCC FreezeBall
-; IncSpeed:
-;   LDA #$02
-;   STA ballspeedx
-;   STA ballspeedy
-;   CLC
-;   BCC ReadLeftBtnDone
-; FreezeBall:
-;   LDA #$00
-;   STA ballspeedx
-;   STA ballspeedy
 ReadLeftBtnDone:
-  ; LDA buttons1
-  ; ;AND #%11111101
-  ; STA buttons1pre
 
 ReadRightBtn:
   LDA buttons1
@@ -474,10 +334,6 @@ ReadRightBtn:
   ; test move BR ONE
   JSR MoveBROne
 ReadRightBtnDone:
-  ;LDA buttons1
-  ; AND #%11111110
-  ; ;EOR #$01
-  ; STA buttons1pre
 
 ReadDownBtn:
   LDA buttons1
@@ -520,9 +376,6 @@ ReadDownBtn:
   ; test move BR ONE
   JSR MoveBROne
 ReadDownBtnDone:
-  ; LDA buttons1
-  ; EOR #$04
-  ; STA buttons1pre
 
 ReadUpBtn:
   LDA buttons1
@@ -562,9 +415,6 @@ ReadUpBtn:
   ; test move BR ONE
   JSR MoveBROne
 ReadUpBtnDone:
-  ; LDA buttons1
-  ; EOR #$08
-  ; STA buttons1pre
 
   LDA buttons1
   EOR #$FF
@@ -642,21 +492,13 @@ BlockLoopContinue:
   BNE BlockLoop
   RTS
 
-; MoveBROne:
-;   CLC
-;   LDA brOnePosY
-;   ADC #PLAYERYMOV
-;   STA brOnePosY
-;   LDA brOnePosX
-;   CLC
-;   SEC             
-;   SBC #PLAYERHMOV
-;   STA brOnePosX
-;   LDA brOneCoorY
-;   SEC
-;   SBC #$01
-;   STA brOneCoorY
-;   RTS
+CheckNextPositionBR:
+  LDA xone
+  STA playerPossibleCoorX
+  LDA yone
+  STA playerPossibleCoorY
+  JSR CheckNextPosition
+  RTS
 
 MoveBROne:
   CLC
@@ -666,94 +508,70 @@ MoveBROne:
   STA yone
   LDA brOneCoorX
   STA xone
+  JSR CheckNextPositionBR
+  LDX CANTMOVE
+  STX brPossibleUp
+  LDA canMove
+  CMP #$01
+  BNE CalculateMoveLeft ;need to skip calculatedistance if canMove is zero.
   JSR CalculateDistance
   LDA rootResult
   STA brPossibleUp ;save result as UP result
   ;Get BR possible LEFT distance result
+CalculateMoveLeft:
   LDA brOneCoorX
   CLC
   ADC #$01
   STA xone
   LDA brOneCoorY
   STA yone
+  JSR CheckNextPositionBR
+  LDX CANTMOVE
+  STX brPossibleLeft
+  LDA canMove
+  CMP #$01
+  BNE CalculateMoveDown
   JSR CalculateDistance
   LDA rootResult
   STA brPossibleLeft
   ;Get BR possible DOWN distance result
+CalculateMoveDown:
   LDA brOneCoorY
   SEC
   SBC #$01
   STA yone
   LDA brOneCoorX
   STA xone
+  JSR CheckNextPositionBR
+  LDX CANTMOVE
+  STX brPossibleDown
+  LDA canMove
+  CMP #$01
+  BNE CalculateMoveRight
   JSR CalculateDistance
   LDA rootResult
   STA brPossibleDown
   ;Get BR possible RIGHT distance result
+CalculateMoveRight:
   LDA brOneCoorX
   SEC
   SBC #$01
   STA xone
   LDA brOneCoorY
   STA yone
+  JSR CheckNextPositionBR
+  LDX CANTMOVE
+  STX brPossibleRight
+  LDA canMove
+  CMP #$01
+  BNE SetComparing
   JSR CalculateDistance
   LDA rootResult
   STA brPossibleRight
-
-
-  ; ;check up movement
-  ; LDA brOneCoorY
-  ; ADC #$01
-  ; ADC brOneCoorX
-  ; ADC playerCoorSum
-  ; STA brPossibleUp
-  ; ;check right movement
-  ; LDA brOneCoorX
-  ; SEC
-  ; SBC #$01
-  ; CLC
-  ; ADC brOneCoorY
-  ; ADC playerCoorSum
-  ; STA brPossibleRight
-  ; ;check down movement
-  ; LDA brOneCoorY
-  ; SEC
-  ; SBC #$01
-  ; CLC
-  ; ADC brOneCoorX
-  ; ADC playerCoorSum
-  ; STA brPossibleDown
-  ; ;check left movement
-  ; LDA brOneCoorX
-  ; ADC #$01
-  ; ADC brOneCoorY
-  ; ADC playerCoorSum
-  ; STA brPossibleLeft
-
-
+SetComparing:
   ; save up as minor
   LDA brPossibleUp
   STA brSmallerDistance
-  ; step 1 start comparing values
-  ; compare minor to left
-; StartComparing:
-;   LDA brPossibleLeft
-;   SBC brSmallerDistance
-;   BMI SaveLeftAsMinorDistance
-;     ; if negative flag branch to saveMinor
-;   ; compare minor to down
-;   LDA brPossibleDown
-;   SBC brSmallerDistance
-;   BMI SaveDownAsMinorDistance
-;     ; if negative flag branch to saveMinor
-;   ; compare minor to right
-;   LDA brPossibleRight
-;   SBC brSmallerDistance
-;   BMI SaveRightAsMinorDistance
-;   JMP ComparingDone ;smaller value was found or up was smaller and never branched
-;     ; if negative flag branch to saveMinor
-;   ;if minor has been found, jump to comparingDone
-;   ;save minor= STA minorValue, branch to step1
 StartComparing:
   LDA brPossibleLeft
   SEC
@@ -858,31 +676,6 @@ MoveBRRight:
   STA brOneCoorX
   JMP MoveDone
 MoveDone:
-      ; if is the same, set direction to up (1=up, 2=left, 3=down, 4=right)
-    ;compare minorValue to left
-    ;compare minorValue to down
-    ;compare minorValue to right
-  
-  
-  
-  ; CLC
-  ; LDA brPossibleUp
-  ; SBC brPossibleLeft
-  ; BMI UpdateSmallerValue
-
-; GetDistanceResult:
-;   LDX #$00
-;   LDA [brPossibleUp],X
-;   STA brSmallerDistance
-; GetDistanceResultLoop:
-;   CLC
-;   LDA [brPossibleUp],X
-;   SBC brPossibleLeft
-;   BMI UpdateSmallerValue
-; UpdateSmallerValue:
-;   INX 
-;   STX brSmallerDistance
-
   RTS
 
 CalculateDistance:
@@ -928,11 +721,6 @@ DoneWithSubtractY:
   STA numberToRoot
   ;calculate sqr root
   JSR SQRCalculation
-  ;; ############ TESTING
-  ; LDA xTotal
-  ; CLC
-  ; ADC yTotal
-  ; STA rootResult
   RTS
 
 DistanceMultiplication:
@@ -1100,6 +888,8 @@ Loop:
 Result:
  STA rootRemanent ; remanent
  LDA rootRegisterE
+ CLC
+ ADC rootRemanent
  STA rootResult ;result 
  RTS
 ;;;;;;;;;;;;;;  
