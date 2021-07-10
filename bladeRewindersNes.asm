@@ -36,6 +36,14 @@ brOnePosX .rs 1
 brOnePosY .rs 1
 brOneCoorX .rs 1
 brOneCoorY .rs 1
+brTwoPosX .rs 1
+brTwoPosY .rs 1
+brTwoCoorX .rs 1
+brTwoCoorY .rs 1
+brCurrentPosX .rs 1 ;current br being modified, then, results are applied on ONE or TWO
+brCurrentPosY .rs 1
+brCurrentCoorX .rs 1
+brCurrentCoorY .rs 1
 brPossibleUp .rs 1
 brPossibleLeft .rs 1
 brPossibleDown .rs 1
@@ -291,7 +299,7 @@ ReadLeftBtn:
   ADC #$01
   STA playerCoorX
   ; test move BR ONE
-  JSR MoveBROne
+  JSR MoveBRs
 ReadLeftBtnDone:
 
 ReadRightBtn:
@@ -332,7 +340,7 @@ ReadRightBtn:
   SBC #$01
   STA playerCoorX
   ; test move BR ONE
-  JSR MoveBROne
+  JSR MoveBRs
 ReadRightBtnDone:
 
 ReadDownBtn:
@@ -374,7 +382,7 @@ ReadDownBtn:
   SBC #$01
   STA playerCoorY
   ; test move BR ONE
-  JSR MoveBROne
+  JSR MoveBRs
 ReadDownBtnDone:
 
 ReadUpBtn:
@@ -413,7 +421,7 @@ ReadUpBtn:
   ADC #$01
   STA playerCoorY
   ; test move BR ONE
-  JSR MoveBROne
+  JSR MoveBRs
 ReadUpBtnDone:
 
   LDA buttons1
@@ -500,13 +508,36 @@ CheckNextPositionBR:
   JSR CheckNextPosition
   RTS
 
+MoveBRs:
+  LDA brOnePosX
+  STA brCurrentPosX
+  LDA brOnePosY
+  STA brCurrentPosY
+  LDA brOneCoorX
+  STA brCurrentCoorX
+  LDA brOneCoorY
+  STA brCurrentCoorY
+  JSR MoveBROne
+  ;apply results to brOne
+  LDA brCurrentPosX
+  STA brOnePosX
+  LDA brCurrentPosY
+  STA brOnePosY
+  LDA brCurrentCoorX
+  STA brOneCoorX
+  LDA brCurrentCoorY
+  STA brOneCoorY
+  RTS
+  ;check BR total number on level
+  ;if two, apply same on second
+
 MoveBROne:
   CLC
   ;Get BR possible UP distance result
-  LDA brOneCoorY
+  LDA brCurrentCoorY
   ADC #$01
   STA yone
-  LDA brOneCoorX
+  LDA brCurrentCoorX
   STA xone
   JSR CheckNextPositionBR
   LDX CANTMOVE
@@ -519,11 +550,11 @@ MoveBROne:
   STA brPossibleUp ;save result as UP result
   ;Get BR possible LEFT distance result
 CalculateMoveLeft:
-  LDA brOneCoorX
+  LDA brCurrentCoorX
   CLC
   ADC #$01
   STA xone
-  LDA brOneCoorY
+  LDA brCurrentCoorY
   STA yone
   JSR CheckNextPositionBR
   LDX CANTMOVE
@@ -536,11 +567,11 @@ CalculateMoveLeft:
   STA brPossibleLeft
   ;Get BR possible DOWN distance result
 CalculateMoveDown:
-  LDA brOneCoorY
+  LDA brCurrentCoorY
   SEC
   SBC #$01
   STA yone
-  LDA brOneCoorX
+  LDA brCurrentCoorX
   STA xone
   JSR CheckNextPositionBR
   LDX CANTMOVE
@@ -553,11 +584,11 @@ CalculateMoveDown:
   STA brPossibleDown
   ;Get BR possible RIGHT distance result
 CalculateMoveRight:
-  LDA brOneCoorX
+  LDA brCurrentCoorX
   SEC
   SBC #$01
   STA xone
-  LDA brOneCoorY
+  LDA brCurrentCoorY
   STA yone
   JSR CheckNextPositionBR
   LDX CANTMOVE
@@ -620,60 +651,60 @@ ComparingDone:
   CMP brPossibleRight
   BEQ MoveBRRight
 MoveBRUp:
-  LDA brOnePosY
+  LDA brCurrentPosY
   SEC
   SBC #PLAYERYMOV
-  STA brOnePosY
-  LDA brOnePosX
+  STA brCurrentPosY
+  LDA brCurrentPosX
   CLC       
   ADC #PLAYERHMOV
-  STA brOnePosX
-  LDA brOneCoorY
+  STA brCurrentPosX
+  LDA brCurrentCoorY
   CLC
   ADC #$01
-  STA brOneCoorY
+  STA brCurrentCoorY
   JMP MoveDone
 MoveBRLeft:
-  LDA brOnePosX
+  LDA brCurrentPosX
   SEC
   SBC #PLAYERHMOV
-  STA brOnePosX
-  LDA brOnePosY
+  STA brCurrentPosX
+  LDA brCurrentPosY
   SEC      
   SBC #PLAYERYMOV
-  STA brOnePosY
-  LDA brOneCoorX
+  STA brCurrentPosY
+  LDA brCurrentCoorX
   CLC
   ADC #$01
-  STA brOneCoorX
+  STA brCurrentCoorX
   JMP MoveDone
 MoveBRDown:
   CLC
-  LDA brOnePosY
+  LDA brCurrentPosY
   ADC #PLAYERYMOV
-  STA brOnePosY
-  LDA brOnePosX
+  STA brCurrentPosY
+  LDA brCurrentPosX
   SEC      
   SBC #PLAYERHMOV
-  STA brOnePosX
-  LDA brOneCoorY
+  STA brCurrentPosX
+  LDA brCurrentCoorY
   SEC
   SBC #$01
-  STA brOneCoorY
+  STA brCurrentCoorY
   JMP MoveDone
 MoveBRRight:
-  LDA brOnePosX
+  LDA brCurrentPosX
   CLC
   ADC #PLAYERHMOV
-  STA brOnePosX
-  LDA brOnePosY   
+  STA brCurrentPosX
+  LDA brCurrentPosY   
   CLC       
   ADC #PLAYERYMOV
-  STA brOnePosY
-  LDA brOneCoorX
+  STA brCurrentPosY
+  LDA brCurrentCoorX
   SEC
   SBC #$01
-  STA brOneCoorX
+  STA brCurrentCoorX
   JMP MoveDone
 MoveDone:
   RTS
