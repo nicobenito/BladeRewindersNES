@@ -30,6 +30,8 @@ levelBackground .rs 2; two bytes pointer for BG
 spritesAmount .rs 1; total number of sprites on a level
 levelBlocks .rs 2; two bytes pointer for blocks, is required pointer for each type?
 blocksAmount .rs 1; total number of blocks per level, used to limit loop
+levelBRs .rs 2
+brsAmount .rs 1
 exitX     .rs 1
 exitY     .rs 1
 brOnePosX .rs 1
@@ -65,6 +67,8 @@ multTempResult .rs 1
 multResultOne .rs 1
 multResultTwo .rs 1
 numberToMult .rs 1
+;TEST EXIT
+playerHasWon .rs 1
 
 
 
@@ -156,14 +160,8 @@ LoadPalettesLoop:
   LDA #$68
   STA posx
 
-  ;set br start pos
-  LDA #$63
-  STA brOnePosY  
-  LDA #$6C
-  STA brOnePosX
-  LDA #$06
-  STA brOneCoorX
-  STA brOneCoorY
+  LDA #$00
+  STA playerHasWon
 
   ;set coordinates
   LDA #$01
@@ -282,7 +280,7 @@ ReadLeftBtn:
   JSR CheckNextPosition
   LDA canMove
   CMP #$01
-  BNE ReadRightBtnDone
+  BNE ReadLeftBtnDone
   LDA buttons1
   STA buttons1pre
   LDA posx
@@ -299,6 +297,7 @@ ReadLeftBtn:
   ADC #$01
   STA playerCoorX
   ; test move BR ONE
+  JSR CheckIfExit
   JSR MoveBRs
 ReadLeftBtnDone:
 
@@ -340,6 +339,7 @@ ReadRightBtn:
   SBC #$01
   STA playerCoorX
   ; test move BR ONE
+  JSR CheckIfExit
   JSR MoveBRs
 ReadRightBtnDone:
 
@@ -382,6 +382,7 @@ ReadDownBtn:
   SBC #$01
   STA playerCoorY
   ; test move BR ONE
+  JSR CheckIfExit
   JSR MoveBRs
 ReadDownBtnDone:
 
@@ -421,13 +422,13 @@ ReadUpBtn:
   ADC #$01
   STA playerCoorY
   ; test move BR ONE
+  JSR CheckIfExit
   JSR MoveBRs
 ReadUpBtnDone:
 
   LDA buttons1
   EOR #$FF
   STA buttons1pre
-  JSR CheckIfExit
   JMP GameEngineDone
 
 UpdateSprites:
@@ -509,6 +510,9 @@ CheckNextPositionBR:
   RTS
 
 MoveBRs:
+  LDA playerHasWon
+  CMP #$01
+  BEQ MoveBrsDone
   LDA brOnePosX
   STA brCurrentPosX
   LDA brOnePosY
@@ -527,6 +531,7 @@ MoveBRs:
   STA brOneCoorX
   LDA brCurrentCoorY
   STA brOneCoorY
+MoveBrsDone:
   RTS
   ;check BR total number on level
   ;if two, apply same on second
@@ -565,6 +570,7 @@ CalculateMoveLeft:
   JSR CalculateDistance
   LDA rootResult
   STA brPossibleLeft
+  ;JMP MoveDone
   ;Get BR possible DOWN distance result
 CalculateMoveDown:
   LDA brCurrentCoorY
@@ -582,6 +588,8 @@ CalculateMoveDown:
   JSR CalculateDistance
   LDA rootResult
   STA brPossibleDown
+  ; TEST ### HERE IT FAILS, leaving on LEFT it does not
+  ;JMP MoveDone
   ;Get BR possible RIGHT distance result
 CalculateMoveRight:
   LDA brCurrentCoorX
@@ -604,6 +612,8 @@ SetComparing:
   LDA brPossibleUp
   STA brSmallerDistance
 StartComparing:
+  ;TEST #####
+  ;JMP MoveDone
   LDA brPossibleLeft
   SEC
   SBC brSmallerDistance
@@ -639,6 +649,8 @@ SaveRightAsMinorDistance:
   JMP StartComparing
 ComparingDone:
   LDA brSmallerDistance
+  ; test
+  ;JMP MoveDone
   ;comparingDone
   ;get direction
     ;compare minorValue to up
@@ -720,7 +732,7 @@ CalculateDistance:
   BPL DoneWithSubtractX
   LDA #$00
   SEC
-  SBC #$fe
+  SBC xTotal
   STA xTotal
 DoneWithSubtractX:
   LDA yone
@@ -730,7 +742,7 @@ DoneWithSubtractX:
   BPL DoneWithSubtractY
   LDA #$00
   SEC
-  SBC #$fe
+  SBC yTotal
   STA yTotal
 DoneWithSubtractY:
   ; exponential x
@@ -766,12 +778,16 @@ DistanceMultiplication:
   RTS
  
 CheckIfExit:
+  LDA #$00
+  STA playerHasWon
   LDA playerCoorX
   CMP exitX
   BNE CheckIfExitDone
   LDA playerCoorY
   CMP exitY
   BNE CheckIfExitDone
+  LDA #$01
+  STA playerHasWon
   JSR LoadNxtLevel
 CheckIfExitDone:
   RTS
@@ -792,6 +808,8 @@ LoadNxtLevel:
   ; turn PPU off
   LDA #$00
   STA $2001
+  ; CLEAN PPU?????
+
   ; draw new lvl
   JSR LoadLevel
   ; turn PPU on
@@ -845,6 +863,13 @@ LoadLevel:
   sta levelBlocks+1
   LDA blocksTotalPerLvl, y
   sta blocksAmount
+  ; set bladeRewinders
+  LDA brPointers+0, x
+  STA levelBRs+0
+  LDA brPointers+1, x
+  STA levelBRs+1
+  LDA bladeRewindersTotalPerLvl, y
+  STA brsAmount
   ;set bg
   lda bgLevelsPointers+0, X
   sta levelBackground+0
@@ -857,7 +882,7 @@ LoadSpritesLoop:
   LDA [levelSprites], y        ; load data from address (sprites +  x)
   STA $0200, y          ; store into RAM address ($0200 + x)
   INY                   ; X = X + 1
-  CPY spritesAmount     ; Compare X to hex $10, decimal 16
+  CPY spritesAmount     ; Compare X to hex $10, decimal
   BNE LoadSpritesLoop   ; Branch to LoadSpritesLoop if compare was Not Equal to zero
                         ; if compare was equal to 16, keep going down
 
@@ -892,8 +917,33 @@ InsideLoop:
   INX
   CPX #$04
   BNE OutsideLoop     ; run the outside loop 256 times before continuing down
+  ; RTS
+
+LoadBladeRewinders:
+  LDY #$00
+LoadBRLoop:
+  LDA [levelBRs], Y
+  STA brCurrentCoorX
+  INY
+  LDA [levelBRs], Y
+  STA brCurrentCoorY
+  INY
+  LDA [levelBRs], Y
+  STA brCurrentPosX
+  INY
+  LDA [levelBRs], Y
+  STA brCurrentPosY
+  ; asign to one
+  LDA brCurrentPosX
+  STA brOnePosX
+  LDA brCurrentPosY
+  STA brOnePosY
+  LDA brCurrentCoorX
+  STA brOneCoorX
+  LDA brCurrentCoorY
+  STA brOneCoorY
   RTS
-  
+
 ;;;;;;;;;;;;;
 ; SQR ROUTINE
 SQRCalculation:
@@ -901,7 +951,7 @@ SQRCalculation:
  STA rootRegisterD ;D
  STA rootRegisterE ;E
  LDA numberToRoot
-Loop: 
+SQRLoop: 
  SEC
  SBC rootRegisterD
  CMP #$00
@@ -915,7 +965,7 @@ Loop:
  LDX rootRegisterE
  INX
  STX rootRegisterE
- JMP Loop 	
+ JMP SQRLoop 	
 Result:
  STA rootRemanent ; remanent
  LDA rootRegisterE
@@ -956,7 +1006,7 @@ spritesLvl1:
   .db $88, $61, $03, $88
   .db $90, $70, $03, $80
   .db $90, $71, $03, $88
-  .db $63, $40, $00, $6C   ;sprite 0
+  .db $63, $40, $00, $6C   ;BR 1
   ; .db $83, $41, $00, $6C   ;sprite 1
   ; .db $73, $41, $00, $8C   ;sprite 1
   ; .db $8B, $41, $00, $9C   ;sprite 1
@@ -1025,6 +1075,17 @@ blocksLvl3:
   .db $04, $06, $6C, $83
   .db $04, $07, $8C, $73
 
+bladeRewindersTotalPerLvl:
+  .db $01, $01, $01
+
+bladeRewindersLvl1:
+  ; coorX, coorY, sprX, sprY
+  .db $06, $06, $6C, $63
+
+bladeRewindersLvl2:
+  ; coorX, coorY, sprX, sprY
+  .db $06, $05, $6C, $93
+
 bgLevelsPointers:
   .dw bglvl01
   .dw bglvl02
@@ -1039,6 +1100,10 @@ blocksPointers:
   .dw blocksLvl1
   .dw blocksLvl2
   .dw blocksLvl3
+
+brPointers:
+  .dw bladeRewindersLvl1
+  .dw bladeRewindersLvl2
 
   .org $FFFA     ;first of the three vectors starts here
   .dw NMI        ;when an NMI happens (once per frame if enabled) the 
