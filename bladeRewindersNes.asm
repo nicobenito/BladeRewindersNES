@@ -86,6 +86,8 @@ PLAYERYMOV     = $08
 
 BRONEY         = $0218
 BRONEX         = $021B
+BRTWOY         = $021C
+BRTWOX         = $021F
 CANTMOVE       = $10
 
 ;;;;;;;;;;;;;;;;;;
@@ -468,7 +470,15 @@ UpdateSprites:
   STA BRONEX
   LDA brOnePosY
   STA BRONEY
-  
+
+  LDA brsAmount
+  CMP #$02
+  BNE UpdateSpritesDone
+  LDA brTwoPosX
+  STA BRTWOX
+  LDA brTwoPosY
+  STA BRTWOY
+UpdateSpritesDone:  
   RTS
  
 DrawScore:
@@ -531,6 +541,28 @@ MoveBRs:
   STA brOneCoorX
   LDA brCurrentCoorY
   STA brOneCoorY
+  LDA brsAmount
+  CMP #$02
+  BNE MoveBrsDone
+  LDA brTwoPosX
+  STA brCurrentPosX
+  LDA brTwoPosY
+  STA brCurrentPosY
+  LDA brTwoCoorX
+  STA brCurrentCoorX
+  LDA brTwoCoorY
+  STA brCurrentCoorY
+  JSR MoveBROne
+  ;apply results to brTwo
+  LDA brCurrentPosX
+  STA brTwoPosX
+  LDA brCurrentPosY
+  STA brTwoPosY
+  LDA brCurrentCoorX
+  STA brTwoCoorX
+  LDA brCurrentCoorY
+  STA brTwoCoorY
+
 MoveBrsDone:
   RTS
   ;check BR total number on level
@@ -745,18 +777,26 @@ DoneWithSubtractX:
   SBC yTotal
   STA yTotal
 DoneWithSubtractY:
-  ; exponential x
+  ; exponential x - skip if zero
   LDA xTotal
+  STA multResultOne
+  CMP #$00
+  BEQ DoneExponentialX
   STA numberToMult
   JSR DistanceMultiplication
   LDA multTempResult
   STA multResultOne
-  ; exponential Y
+  ; exponential Y - also skip if zero
+DoneExponentialX:
   LDA yTotal
+  STA multResultTwo
+  CMP #$00
+  BEQ DoneExponentialY
   STA numberToMult
   JSR DistanceMultiplication
   LDA multTempResult
   STA multResultTwo
+DoneExponentialY:
   ; sum results and sqr root
   LDA multResultOne
   CLC
@@ -809,7 +849,12 @@ LoadNxtLevel:
   LDA #$00
   STA $2001
   ; CLEAN PPU?????
-
+  LDX #$00
+CleanPPULoop:
+  STA BRONEY, x
+  INX
+  CPX spritesAmount
+  BNE CleanPPULoop
   ; draw new lvl
   JSR LoadLevel
   ; turn PPU on
@@ -921,6 +966,7 @@ InsideLoop:
 
 LoadBladeRewinders:
   LDY #$00
+  LDX #$01
 LoadBRLoop:
   LDA [levelBRs], Y
   STA brCurrentCoorX
@@ -933,7 +979,11 @@ LoadBRLoop:
   INY
   LDA [levelBRs], Y
   STA brCurrentPosY
+  INY
+  CPX #$02
+  BEQ AssignBRTwo
   ; asign to one
+  INX
   LDA brCurrentPosX
   STA brOnePosX
   LDA brCurrentPosY
@@ -942,6 +992,20 @@ LoadBRLoop:
   STA brOneCoorX
   LDA brCurrentCoorY
   STA brOneCoorY
+  LDA brsAmount
+  CMP #$02
+  BEQ LoadBRLoop
+  JMP LoadBRDone
+AssignBRTwo:
+  LDA brCurrentPosX
+  STA brTwoPosX
+  LDA brCurrentPosY
+  STA brTwoPosY
+  LDA brCurrentCoorX
+  STA brTwoCoorX
+  LDA brCurrentCoorY
+  STA brTwoCoorY
+LoadBRDone:
   RTS
 
 ;;;;;;;;;;;;;
@@ -996,7 +1060,7 @@ palette:
   .db $22,$13,$23,$33,  $22,$02,$38,$3C,  $22,$13,$23,$33,  $22,$1C,$20,$2B   ;;sprite palette
 
 spritesTotalPerLvl: ;value multiplied by four because of attributes
-  .db $1C, $18, $18
+  .db $20, $1C, $18
 
 spritesLvl1:
      ;vert tile attr horiz
@@ -1007,6 +1071,7 @@ spritesLvl1:
   .db $90, $70, $03, $80
   .db $90, $71, $03, $88
   .db $63, $40, $00, $6C   ;BR 1
+  .db $63, $40, $00, $6C   ;BR 2
   ; .db $83, $41, $00, $6C   ;sprite 1
   ; .db $73, $41, $00, $8C   ;sprite 1
   ; .db $8B, $41, $00, $9C   ;sprite 1
@@ -1019,6 +1084,7 @@ spritesLvl2:
   .db $88, $61, $03, $88
   .db $90, $70, $03, $80
   .db $90, $71, $03, $88
+  .db $63, $40, $00, $6C   ;BR 1
   ; .db $83, $41, $00, $6C   ;sprite 1
   ; .db $8B, $41, $00, $9C   ;sprite 1
 
@@ -1076,11 +1142,12 @@ blocksLvl3:
   .db $04, $07, $8C, $73
 
 bladeRewindersTotalPerLvl:
-  .db $01, $01, $01
+  .db $02, $01, $01
 
 bladeRewindersLvl1:
   ; coorX, coorY, sprX, sprY
   .db $06, $06, $6C, $63
+  .db $06, $07, $7C, $5B
 
 bladeRewindersLvl2:
   ; coorX, coorY, sprX, sprY
