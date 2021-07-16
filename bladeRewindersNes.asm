@@ -889,6 +889,44 @@ CheckIfExit:
 CheckIfExitDone:
   RTS
 
+SetPlayerInitialPos:
+  LDA levelNumber
+  ASL A
+  TAX
+  LDA playerInitialPositions+0, x
+	STA pointerLo
+	LDA playerInitialPositions+1, x
+	STA pointerHi
+  LDY #$00
+  LDA [pointerLo], y
+  STA playerCoorX
+  INY
+  LDA [pointerLo], y
+  STA playerCoorY
+  INY
+  LDA [pointerLo], y
+  STA posx
+  INY
+  LDA [pointerLo], y
+  STA posy
+  RTS
+
+SetExitPosition:
+  LDA levelNumber
+  ASL A
+  TAX
+  LDA exitsPositions+0, X
+  STA pointerLo
+  LDA exitsPositions+1, X
+  STA pointerHi
+  LDY #$00
+  LDA [pointerLo], Y
+  STA exitX
+  INY
+  LDA [pointerLo], Y
+  STA exitY
+  RTS
+
 LoadNxtLevel:
   LDA levelNumber
   CLC
@@ -898,13 +936,15 @@ ResetLevel:
   LDA #$00
   STA playerLost
   ; reset player pos
-  LDA #$01
-  STA playerCoorX
-  STA playerCoorY
-  LDA #$A3
-  STA posy  
-  LDA #$68
-  STA posx
+  ; LDA #$01
+  ; STA playerCoorX
+  ; STA playerCoorY
+  ; LDA #$A3
+  ; STA posy  
+  ; LDA #$68
+  ; STA posx
+  JSR SetPlayerInitialPos
+  JSR SetExitPosition
   ; turn PPU off
   LDA #$00
   STA $2001
@@ -1120,7 +1160,7 @@ palette:
   .db $22,$13,$23,$33,  $22,$02,$38,$3C,  $22,$13,$23,$33,  $22,$1C,$20,$2B   ;;sprite palette
 
 spritesTotalPerLvl: ;value multiplied by four because of attributes
-  .db $1C, $1C, $18
+  .db $1C, $1C, $1C
 
 spritesLvl1:
      ;vert tile attr horiz
@@ -1156,6 +1196,7 @@ spritesLvl3:
   .db $88, $61, $03, $88
   .db $90, $70, $03, $80
   .db $90, $71, $03, $88
+  .db $63, $40, $00, $6C   ;BR 1
   ; .db $83, $41, $00, $4C   ;sprite 1
   ; .db $7B, $41, $00, $5C   ;sprite 1
   ; .db $73, $41, $00, $6C   ;sprite 1
@@ -1211,7 +1252,23 @@ bladeRewindersLvl1:
 
 bladeRewindersLvl2:
   ; coorX, coorY, sprX, sprY
+  .db $02, $07, $BC, $7B
   .db $06, $05, $5C, $6B
+
+bladeRewindersLvl3:
+  ; coorX, coorY, sprX, sprY
+  .db $06, $05, $5C, $6B
+
+initialPlayerPosLvl1:
+  ; coorx. coory, X, Y
+  .db $01, $01, $68, $A3
+
+exitsPosLvl1:
+  ; X, Y
+  .db $06, $06
+
+exitsPosLvl2:
+  .db $06, $03
 
 bgLevelsPointers:
   .dw bglvl01
@@ -1231,7 +1288,18 @@ blocksPointers:
 brPointers:
   .dw bladeRewindersLvl1
   .dw bladeRewindersLvl2
+  .dw bladeRewindersLvl3
 
+playerInitialPositions:
+  .dw initialPlayerPosLvl1
+  .dw initialPlayerPosLvl1
+  .dw initialPlayerPosLvl1
+
+exitsPositions:
+  .dw exitsPosLvl1
+  .dw exitsPosLvl2
+  .dw exitsPosLvl1
+  
   .org $FFFA     ;first of the three vectors starts here
   .dw NMI        ;when an NMI happens (once per frame if enabled) the 
                    ;processor will jump to the label NMI:
