@@ -69,6 +69,7 @@ multResultTwo .rs 1
 numberToMult .rs 1
 ;TEST EXIT
 playerHasWon .rs 1
+playerLost .rs 1
 
 
 
@@ -260,7 +261,11 @@ EngineGameOver:
 ;;;;;;;;;;;
  
 EnginePlaying:
-
+; check if player has lost, if yes, skip read arrows and only read Start for reset.
+  LDA playerLost
+  CMP #$01
+  BNE ReadLeftBtn
+  JMP SkipButtonRead
 ReadLeftBtn:
   LDA buttons1
   AND #%00000010
@@ -431,6 +436,15 @@ ReadUpBtnDone:
   LDA buttons1
   EOR #$FF
   STA buttons1pre
+SkipButtonRead:
+  LDA buttons1
+  AND #%00010000
+  BEQ GameEngineContinue
+  LDA playerLost
+  CMP #$01
+  BNE GameEngineContinue
+  JSR ResetLevel
+GameEngineContinue:
   JMP GameEngineDone
 
 UpdateSprites:
@@ -569,9 +583,15 @@ MoveBrsDone:
   ;if two, apply same on second
 
 MoveBROne:
-  CLC
+  JSR CheckForPlayer
+  LDA playerLost
+  CMP #$01
+  BNE CalculateMoveUp
+  JMP MoveDone
+CalculateMoveUp:
   ;Get BR possible UP distance result
   LDA brCurrentCoorY
+  CLC
   ADC #$01
   STA yone
   LDA brCurrentCoorX
@@ -751,6 +771,43 @@ MoveBRRight:
   STA brCurrentCoorX
   JMP MoveDone
 MoveDone:
+  JSR CheckForPlayer
+  RTS
+
+CheckForPlayer:
+  LDA playerLost
+  CMP #$01
+  BEQ CheckPlayerDone
+  ; (xa - xb) + (ya - yb)
+  ; check result, if 1, is next to player
+  LDA playerCoorX
+  SEC
+  SBC brCurrentCoorX
+  STA xTotal
+  BPL DoneWithX
+  EOR #$FF
+  CLC
+  ADC #$01
+  STA xTotal
+DoneWithX:
+  LDA playerCoorY
+  SEC
+  SBC brCurrentCoorY
+  STA yTotal
+  BPL DoneWithY
+  EOR #$FF
+  CLC
+  ADC #$01
+  STA yTotal
+DoneWithY:
+  LDA xTotal
+  CLC
+  ADC yTotal
+  CMP #$01
+  BNE CheckPlayerDone
+  LDA #$01
+  STA playerLost
+CheckPlayerDone:
   RTS
 
 CalculateDistance:
@@ -837,6 +894,9 @@ LoadNxtLevel:
   CLC
   ADC #$01
   STA levelNumber
+ResetLevel:
+  LDA #$00
+  STA playerLost
   ; reset player pos
   LDA #$01
   STA playerCoorX
@@ -1060,7 +1120,7 @@ palette:
   .db $22,$13,$23,$33,  $22,$02,$38,$3C,  $22,$13,$23,$33,  $22,$1C,$20,$2B   ;;sprite palette
 
 spritesTotalPerLvl: ;value multiplied by four because of attributes
-  .db $20, $1C, $18
+  .db $1C, $1C, $18
 
 spritesLvl1:
      ;vert tile attr horiz
@@ -1142,7 +1202,7 @@ blocksLvl3:
   .db $04, $07, $8C, $73
 
 bladeRewindersTotalPerLvl:
-  .db $02, $01, $01
+  .db $01, $01, $01
 
 bladeRewindersLvl1:
   ; coorX, coorY, sprX, sprY
@@ -1151,7 +1211,7 @@ bladeRewindersLvl1:
 
 bladeRewindersLvl2:
   ; coorX, coorY, sprX, sprY
-  .db $06, $05, $6C, $93
+  .db $06, $05, $5C, $6B
 
 bgLevelsPointers:
   .dw bglvl01
