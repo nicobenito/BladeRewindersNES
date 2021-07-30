@@ -28,24 +28,31 @@ levelNumber .rs 1 ; level number 0-?
 levelSprites .rs 2; two bytes pointer/address
 levelBackground .rs 2; two bytes pointer for BG
 spritesAmount .rs 1; total number of sprites on a level
-levelBlocks .rs 2; two bytes pointer for blocks, is required pointer for each type?
+levelBlocks .rs 2; two bytes pointer for blocks, is required pointer for each type? depends, on this case it is because it needs to keep value for later use
 blocksAmount .rs 1; total number of blocks per level, used to limit loop
+levelButtons .rs 2; buttons/elements of level.
+buttonsAmount .rs 1
 levelBRs .rs 2
 brsAmount .rs 1
+levelCurrentGroup .rs 2 ; used to pass address and loop to check everyposition for player an BR
+currentGroupAmount .rs 1
 exitX     .rs 1
 exitY     .rs 1
 brOnePosX .rs 1
 brOnePosY .rs 1
 brOneCoorX .rs 1
 brOneCoorY .rs 1
+brOnePaused .rs 1
 brTwoPosX .rs 1
 brTwoPosY .rs 1
 brTwoCoorX .rs 1
 brTwoCoorY .rs 1
+brTwoPaused .rs 1
 brCurrentPosX .rs 1 ;current br being modified, then, results are applied on ONE or TWO
 brCurrentPosY .rs 1
 brCurrentCoorX .rs 1
 brCurrentCoorY .rs 1
+brCurrentPaused .rs 1
 brPossibleUp .rs 1
 brPossibleLeft .rs 1
 brPossibleDown .rs 1
@@ -67,12 +74,23 @@ multTempResult .rs 1
 multResultOne .rs 1
 multResultTwo .rs 1
 numberToMult .rs 1
-;TEST EXIT
 playerHasWon .rs 1
 playerLost .rs 1
-
-
-
+currentCharacterCoorX .rs 1
+currentCharacterCoorY .rs 1
+currentCharacterPaused .rs 1
+currentIsPlayer .rs 1
+brOneLastCoorX .rs 1
+brOneLastCoorY .rs 1
+brOneLastPosX .rs 1
+brOneLastPosY .rs 1
+brTwoLastCoorX .rs 1
+brTwoLastCoorY .rs 1
+brTwoLastPosX .rs 1
+brTwoLastPosY .rs 1
+hasRewinded .rs 1
+playerHasMove .rs 1
+checkLoopCounter .rs 1
 
 
 ;; DECLARE SOME CONSTANTS HERE
@@ -90,6 +108,10 @@ BRONEX         = $021B
 BRTWOY         = $021C
 BRTWOX         = $021F
 CANTMOVE       = $10
+
+; buttons
+PAUSEDBTN      = $01
+REWINDBTN      = $02
 
 ;;;;;;;;;;;;;;;;;;
 
@@ -262,6 +284,9 @@ EngineGameOver:
  
 EnginePlaying:
 ; check if player has lost, if yes, skip read arrows and only read Start for reset.
+  LDA #$00
+  STA playerHasMove
+  STA hasRewinded
   LDA playerLost
   CMP #$01
   BNE ReadLeftBtn
@@ -303,9 +328,11 @@ ReadLeftBtn:
   LDA playerCoorX
   ADC #$01
   STA playerCoorX
-  ; test move BR ONE
-  JSR CheckIfExit
-  JSR MoveBRs
+  LDA #$01
+  STA playerHasMove
+  ; ; test move BR ONE
+  ; JSR CheckIfExit
+  ; JSR MoveBRs
 ReadLeftBtnDone:
 
 ReadRightBtn:
@@ -345,9 +372,11 @@ ReadRightBtn:
   SEC
   SBC #$01
   STA playerCoorX
+  LDA #$01
+  STA playerHasMove
   ; test move BR ONE
-  JSR CheckIfExit
-  JSR MoveBRs
+  ; JSR CheckIfExit
+  ; JSR MoveBRs
 ReadRightBtnDone:
 
 ReadDownBtn:
@@ -388,9 +417,11 @@ ReadDownBtn:
   SEC
   SBC #$01
   STA playerCoorY
+  LDA #$01
+  STA playerHasMove
   ; test move BR ONE
-  JSR CheckIfExit
-  JSR MoveBRs
+  ; JSR CheckIfExit
+  ; JSR MoveBRs
 ReadDownBtnDone:
 
 ReadUpBtn:
@@ -428,11 +459,28 @@ ReadUpBtn:
   LDA playerCoorY
   ADC #$01
   STA playerCoorY
+  LDA #$01
+  STA playerHasMove
   ; test move BR ONE
-  JSR CheckIfExit
-  JSR MoveBRs
+  ; JSR CheckIfExit
+  ; JSR MoveBRs
 ReadUpBtnDone:
-
+  LDA playerHasMove
+  CMP #$01
+  BNE StoreMovement
+  JSR CheckIfExit
+  LDA playerCoorX
+  STA currentCharacterCoorX
+  LDA playerCoorY
+  STA currentCharacterCoorY
+  LDA #$01
+  STA currentIsPlayer
+  JSR CheckForButtons
+  LDA hasRewinded
+  CMP #$01
+  BEQ StoreMovement
+  JSR MoveBRs
+StoreMovement:
   LDA buttons1
   EOR #$FF
   STA buttons1pre
@@ -525,6 +573,82 @@ BlockLoopContinue:
   BNE BlockLoop
   RTS
 
+CheckForButtons:
+  LDX #$00
+  LDY #$00
+  STX currentCharacterPaused
+CheckButtonsLoop:
+  INX
+  LDA [levelButtons], Y
+  INY
+  CMP currentCharacterCoorX
+  BNE ButtonsLoopContinue ;X pos different
+  LDA [levelButtons], Y
+  CMP currentCharacterCoorY
+  BNE BlockLoopContinue ;Y pos different
+  ; if here is the same position that certain button
+  ; get button type
+
+  ; if 1 is paused
+  ; if is player, do nothing
+  ; set current Paused
+  INY 
+  LDA [levelButtons], Y
+  CMP #PAUSEDBTN
+  BNE CheckRewindBtn
+  LDA currentIsPlayer
+  CMP $01
+  BEQ ButtonsLoopDone
+  LDA #$01
+  STA currentCharacterPaused
+  RTS
+CheckRewindBtn:
+  CMP #REWINDBTN
+  BNE ButtonsLoopDone
+  ; if 2 is rewind if its not player, do nothing
+  LDA currentIsPlayer
+  CMP #$01
+  BNE ButtonsLoopDone
+  ; set rewindaction
+  JSR RewindBRs
+  RTS
+ButtonsLoopContinue:
+  INY
+  INY
+  CPX buttonsAmount
+  BNE CheckButtonsLoop
+ButtonsLoopDone:
+  RTS
+
+RewindBRs:
+  ; set rewindtrigger to prevent move
+  LDA #$01
+  STA hasRewinded
+  ; get last position of one and apply
+  LDA brOneLastCoorX
+  STA brOneCoorX
+  LDA brOneLastCoorY
+  STA brOneCoorY
+  LDA brOneLastPosX
+  STA brOnePosX
+  LDA brOneLastPosY
+  STA brOnePosY
+  ; if two, get last position of two and applied
+  LDA brsAmount
+  CMP #$01
+  BEQ RewindDone
+  LDA brTwoLastCoorX
+  STA brTwoCoorX
+  LDA brTwoLastCoorY
+  STA brTwoCoorY
+  LDA brTwoLastPosX
+  STA brTwoPosX
+  LDA brTwoLastPosY
+  STA brTwoPosY
+RewindDone:
+  RTS
+
+
 CheckNextPositionBR:
   LDA xone
   STA playerPossibleCoorX
@@ -536,7 +660,12 @@ CheckNextPositionBR:
 MoveBRs:
   LDA playerHasWon
   CMP #$01
-  BEQ MoveBrsDone
+  BNE ContinueMove
+  JMP MoveDone
+ContinueMove:
+  LDA brOnePaused
+  CMP #$01
+  BEQ NextBrMove
   LDA brOnePosX
   STA brCurrentPosX
   LDA brOnePosY
@@ -546,6 +675,15 @@ MoveBRs:
   LDA brOneCoorY
   STA brCurrentCoorY
   JSR MoveBROne
+  ; store previous position
+  LDA brOnePosX
+  STA brOneLastPosX
+  LDA brOnePosY
+  STA brOneLastPosY
+  LDA brOneCoorX
+  STA brOneLastCoorX
+  LDA brOneCoorY
+  STA brOneLastCoorY
   ;apply results to brOne
   LDA brCurrentPosX
   STA brOnePosX
@@ -555,9 +693,15 @@ MoveBRs:
   STA brOneCoorX
   LDA brCurrentCoorY
   STA brOneCoorY
+  LDA brCurrentPaused
+  STA brOnePaused
+NextBrMove:
   LDA brsAmount
   CMP #$02
   BNE MoveBrsDone
+  LDA brTwoPaused
+  CMP #$01
+  BEQ MoveBrsDone
   LDA brTwoPosX
   STA brCurrentPosX
   LDA brTwoPosY
@@ -567,6 +711,15 @@ MoveBRs:
   LDA brTwoCoorY
   STA brCurrentCoorY
   JSR MoveBROne
+  ; store previous position
+  LDA brTwoPosX
+  STA brTwoLastPosX
+  LDA brTwoPosY
+  STA brTwoLastPosY
+  LDA brTwoCoorX
+  STA brTwoLastCoorX
+  LDA brTwoCoorY
+  STA brTwoLastCoorY
   ;apply results to brTwo
   LDA brCurrentPosX
   STA brTwoPosX
@@ -576,6 +729,8 @@ MoveBRs:
   STA brTwoCoorX
   LDA brCurrentCoorY
   STA brTwoCoorY
+  LDA brCurrentPaused
+  STA brTwoPaused
 
 MoveBrsDone:
   RTS
@@ -771,6 +926,15 @@ MoveBRRight:
   STA brCurrentCoorX
   JMP MoveDone
 MoveDone:
+  LDA brCurrentCoorX
+  STA currentCharacterCoorX
+  LDA brCurrentCoorY
+  STA currentCharacterCoorY
+  LDA #$00
+  STA currentIsPlayer
+  JSR CheckForButtons
+  LDA currentCharacterPaused
+  STA brCurrentPaused
   JSR CheckForPlayer
   RTS
 
@@ -935,6 +1099,8 @@ LoadNxtLevel:
 ResetLevel:
   LDA #$00
   STA playerLost
+  STA brOnePaused
+  STA brTwoPaused
   ; reset player pos
   ; LDA #$01
   ; STA playerCoorX
@@ -1015,6 +1181,13 @@ LoadLevel:
   STA levelBRs+1
   LDA bladeRewindersTotalPerLvl, y
   STA brsAmount
+  ; set buttons/elements
+  LDA buttonsPositions+0, X
+  STA levelButtons+0
+  LDA buttonsPositions+1, X
+  STA levelButtons+1
+  LDA buttonsPerLevelTotal, Y
+  STA buttonsAmount
   ;set bg
   lda bgLevelsPointers+0, X
   sta levelBackground+0
@@ -1160,7 +1333,7 @@ palette:
   .db $22,$13,$23,$33,  $22,$02,$38,$3C,  $22,$13,$23,$33,  $22,$1C,$20,$2B   ;;sprite palette
 
 spritesTotalPerLvl: ;value multiplied by four because of attributes
-  .db $1C, $1C, $1C
+  .db $24, $1C, $1C
 
 spritesLvl1:
      ;vert tile attr horiz
@@ -1172,6 +1345,7 @@ spritesLvl1:
   .db $90, $71, $03, $88
   .db $63, $40, $00, $6C   ;BR 1
   .db $63, $40, $00, $6C   ;BR 2
+  .db $63, $41, $03, $6C   ; exit
   ; .db $83, $41, $00, $6C   ;sprite 1
   ; .db $73, $41, $00, $8C   ;sprite 1
   ; .db $8B, $41, $00, $9C   ;sprite 1
@@ -1243,7 +1417,7 @@ blocksLvl3:
   .db $04, $07, $8C, $73
 
 bladeRewindersTotalPerLvl:
-  .db $01, $01, $01
+  .db $02, $01, $01
 
 bladeRewindersLvl1:
   ; coorX, coorY, sprX, sprY
@@ -1269,6 +1443,13 @@ exitsPosLvl1:
 
 exitsPosLvl2:
   .db $06, $03
+
+buttonsPerLevelTotal:
+  .db $01, $00, $00
+
+buttonsLvl1:
+  ; X, Y, type (1=pause, 2=rewind, 3=exit?)
+  .db $03, $03, $01
 
 bgLevelsPointers:
   .dw bglvl01
@@ -1299,6 +1480,9 @@ exitsPositions:
   .dw exitsPosLvl1
   .dw exitsPosLvl2
   .dw exitsPosLvl1
+
+buttonsPositions:
+  .dw buttonsLvl1
   
   .org $FFFA     ;first of the three vectors starts here
   .dw NMI        ;when an NMI happens (once per frame if enabled) the 
