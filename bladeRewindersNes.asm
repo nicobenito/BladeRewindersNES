@@ -34,8 +34,6 @@ levelButtons .rs 2; buttons/elements of level.
 buttonsAmount .rs 1
 levelBRs .rs 2
 brsAmount .rs 1
-levelCurrentGroup .rs 2 ; used to pass address and loop to check everyposition for player an BR
-currentGroupAmount .rs 1
 exitX     .rs 1
 exitY     .rs 1
 brOnePosX .rs 1
@@ -90,7 +88,6 @@ brTwoLastPosX .rs 1
 brTwoLastPosY .rs 1
 hasRewinded .rs 1
 playerHasMove .rs 1
-checkLoopCounter .rs 1
 
 
 ;; DECLARE SOME CONSTANTS HERE
@@ -571,6 +568,32 @@ BlockLoopContinue:
   INY
   CPX blocksAmount
   BNE BlockLoop
+  JSR CheckForBRs
+  RTS
+
+CheckForBRs:
+  LDA brOneCoorX
+  CMP playerPossibleCoorX
+  BNE BrContinue ;x different
+  LDA brOneCoorY
+  CMP playerPossibleCoorY
+  BNE BrContinue ; y different
+  LDA #$00
+  STA canMove
+  RTS
+BrContinue:
+  LDA brsAmount
+  CMP #$02
+  BNE CheckBRDone
+  LDA brTwoCoorX
+  CMP playerPossibleCoorX
+  BNE CheckBRDone
+  LDA brTwoCoorY
+  CMP playerPossibleCoorY
+  BNE CheckBRDone
+  LDA #$00
+  STA canMove
+CheckBRDone:
   RTS
 
 CheckForButtons:
