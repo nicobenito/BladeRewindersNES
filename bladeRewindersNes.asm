@@ -88,9 +88,14 @@ brTwoLastPosX .rs 1
 brTwoLastPosY .rs 1
 hasRewinded .rs 1
 playerHasMove .rs 1
+wcount .rs 1
+initialBGNumber .rs 1 ; initial/other screens number
+timerOn .rs 1; nes waiting test 
+timerIsRunning .rs 1
 
 
 ;; DECLARE SOME CONSTANTS HERE
+STATELOGO      = $03  ; display bencom logo screen
 STATETITLE     = $00  ; displaying title screen
 STATEPLAYING   = $01  ; move paddles/ball, check for collisions
 STATEGAMEOVER  = $02  ; displaying game over screen
@@ -174,7 +179,11 @@ LoadPalettesLoop:
   LDA #$00
   STA levelNumber
 
-  JSR LoadLevel
+  ;JSR LoadLevel
+  ; LOADING TITLE SCREEN
+  LDA #$00
+  STA initialBGNumber
+  JSR LoadInitialBackground
   
   ; set screen player position
   LDA #$A3
@@ -201,7 +210,8 @@ LoadPalettesLoop:
 
 
 ;;:Set starting game state
-  LDA #STATEPLAYING
+  LDA #STATELOGO
+  ;LDA #STATEPLAYING
   STA gamestate
 
 
@@ -242,6 +252,10 @@ NMI:
   
 GameEngine:  
   LDA gamestate
+  CMP #STATELOGO
+  BEQ EngineLogo    ;;game is displaying logo screen
+
+  LDA gamestate
   CMP #STATETITLE
   BEQ EngineTitle    ;;game is displaying title screen
     
@@ -254,10 +268,33 @@ GameEngine:
   BEQ EnginePlaying   ;;game is playing
 GameEngineDone:  
   
-  JSR UpdateSprites  
+  JSR UpdateSprites
 
   RTI             ; return from interrupt
- 
+
+EngineLogo: ; need to fix timer
+  JSR TimeWait
+  LDA wcount
+  CMP #$00
+  BNE EngineLogoDone
+  ; ReadStartLogoBtn:
+  ; LDA buttons1
+  ; AND #%00100000
+  ; BEQ EngineLogoDone ;btn not pressed
+  LDA #$01
+  STA initialBGNumber
+  LDA gamestate
+  ; turn PPU off
+  LDA #$00
+  STA $2001
+  JSR LoadInitialBackground
+  LDA #STATETITLE
+  STA gamestate
+EngineLogoDone:
+  JMP GameEngineDone
+
+;;;;;;;;;
+
 EngineTitle:
   ;;if start button pressed
   ;;  turn screen off
@@ -265,6 +302,19 @@ EngineTitle:
   ;;  set starting paddle/ball position
   ;;  go to Playing State
   ;;  turn screen on
+  ReadStartBtn:
+  LDA buttons1
+  AND #%00010000
+  BEQ ReadStartBtnDone ;btn not pressed
+  ; turn PPU off
+  LDA #$00
+  STA $2001
+  JSR LoadLevel
+  ; LDA #%00011110   ; enable sprites, enable background, no clipping on left side
+  ; STA $2001
+  LDA #STATEPLAYING
+  STA gamestate
+  ReadStartBtnDone:
   JMP GameEngineDone
 
 ;;;;;;;;; 
@@ -493,6 +543,9 @@ GameEngineContinue:
   JMP GameEngineDone
 
 UpdateSprites:
+  LDA gamestate
+  CMP #STATEPLAYING
+  BNE UpdateSpritesDone
   LDA posx
   STA PLAYERX
   LDX #$08
@@ -1147,8 +1200,8 @@ CleanPPULoop:
   ; draw new lvl
   JSR LoadLevel
   ; turn PPU on
-  LDA #%00011110   ; enable sprites, enable background, no clipping on left side
-  STA $2001
+  ; LDA #%00011110   ; enable sprites, enable background, no clipping on left side
+  ; STA $2001
   RTS
 
 ReadController1:
@@ -1304,6 +1357,47 @@ AssignBRTwo:
 LoadBRDone:
   RTS
 
+;;;;;;;; TEST LOAD BG
+LoadInitialBackground:
+  LDA initialBGNumber
+  asl A ;multiplies it by 2 since each pointer is 2 bytes
+	tax ;use it as an index
+  lda initialScreenPointers+0, X
+  sta levelBackground+0
+  lda initialScreenPointers+1, X
+  sta levelBackground+1
+  LDA $2002             ; read PPU status to reset the high/low latch
+  LDA #$20
+  STA $2006             ; write the high byte of $2000 address
+  LDA #$00
+  STA $2006             ; write the low byte of $2000 address
+
+  ; LDA #$00
+  LDA levelBackground+0
+  STA pointerLo       ; put the low byte of the address of background into pointer
+  ;LDA #HIGH(levelBackground)
+  LDA levelBackground+1
+  STA pointerHi       ; put the high byte of the address into pointer
+  
+  LDX #$00            ; start at pointer + 0
+  LDY #$00
+InitialOutsideLoop:
+  
+InitialInsideLoop:
+  LDA [pointerLo], y  ; copy one background byte from address in pointer plus Y
+  STA $2007           ; this runs 256 * 4 times
+  
+  INY                 ; inside loop counter
+  CPY #$00
+  BNE InitialInsideLoop      ; run the inside loop 256 times before continuing down
+  
+  INC pointerHi       ; low byte went 0 to 256, so high byte needs to be changed now
+  
+  INX
+  CPX #$04
+  BNE InitialOutsideLoop     ; run the outside loop 256 times before continuing down
+  RTS
+;;;;;;;;;;;;
 ;;;;;;;;;;;;;
 ; SQR ROUTINE
 SQRCalculation:
@@ -1336,11 +1430,42 @@ Result:
  STA rootResult ;result 
  RTS
 ;;;;;;;;;;;;;;  
-  
+TimeWait:
+  LDA timerOn
+  CMP #$01
+  BEQ TimeWaitDone
+  LDA #$01
+  STA timerOn
+  LDA	#10
+	STA	wcount
+bw1:
+  JSR	delay
+	DEC	wcount
+	BNE	bw1
+	JMP Forever ; jump to forever to wait for NMI for good rendering
+
+delay:
+	LDY	#255		;about 0.16s @ 2MHz 
+dloop2:
+	LDX	#255
+dloop1:
+	DEX
+	BNE	dloop1
+	DEY
+	BNE	dloop2
+TimeWaitDone:
+	RTS
+;;;;;;;;;;;;;
   
   
   .bank 1
   .org $E000
+
+logoScreen:
+  incbin "logoscreen1.nam"
+
+titleScreen:
+  incbin "titlescreen1.nam"
 
 bglvl01:
   incbin "bladeRewinderslvl01.nam"
@@ -1352,8 +1477,8 @@ bglvl03:
   incbin "bladeRewinderslvl03.nam"
 
 palette:
-  .db $22,$29,$1A,$0F,  $22,$36,$17,$0F,  $22,$30,$21,$0F,  $22,$27,$17,$0F   ;;background palette
-  .db $22,$13,$23,$33,  $22,$02,$38,$3C,  $22,$13,$23,$33,  $22,$1C,$20,$2B   ;;sprite palette
+  .db $0F,$29,$1A,$0F,  $0F,$36,$17,$0F,  $0F,$05,$16,$26,  $0F,$20,$00,$0F   ;;background palette
+  .db $0F,$13,$23,$33,  $0F,$02,$38,$3C,  $0F,$13,$23,$33,  $0F,$1C,$20,$2B   ;;sprite palette
 
 spritesTotalPerLvl: ;value multiplied by four because of attributes
   .db $24, $1C, $1C
@@ -1473,6 +1598,10 @@ buttonsPerLevelTotal:
 buttonsLvl1:
   ; X, Y, type (1=pause, 2=rewind, 3=exit?)
   .db $03, $03, $01
+
+initialScreenPointers:
+  .dw logoScreen
+  .dw titleScreen
 
 bgLevelsPointers:
   .dw bglvl01
