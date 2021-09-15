@@ -92,6 +92,10 @@ wcount .rs 1
 initialBGNumber .rs 1 ; initial/other screens number
 timerOn .rs 1; nes waiting test 
 timerIsRunning .rs 1
+charPosX .rs 1
+charPosY .rs 1
+charSpriteX .rs 2
+charSpriteY .rs 2
 
 
 ;; DECLARE SOME CONSTANTS HERE
@@ -179,11 +183,11 @@ LoadPalettesLoop:
   LDA #$00
   STA levelNumber
 
-  ;JSR LoadLevel
+  JSR LoadLevel
   ; LOADING TITLE SCREEN
-  LDA #$00
-  STA initialBGNumber
-  JSR LoadInitialBackground
+  ; LDA #$00
+  ; STA initialBGNumber
+  ; JSR LoadInitialBackground
   
   ; set screen player position
   LDA #$A3
@@ -210,8 +214,8 @@ LoadPalettesLoop:
 
 
 ;;:Set starting game state
-  LDA #STATELOGO
-  ;LDA #STATEPLAYING
+  ;LDA #STATELOGO
+  LDA #STATEPLAYING
   STA gamestate
 
 
@@ -546,53 +550,89 @@ UpdateSprites:
   LDA gamestate
   CMP #STATEPLAYING
   BNE UpdateSpritesDone
+  ; update player
   LDA posx
-  STA PLAYERX
-  LDX #$08
-  STA PLAYERX, X
-  LDX #$10
-  STA PLAYERX, X
-  CLC
-  ADC #$08
-  LDX #$04
-  STA PLAYERX, X
-  LDX #$0C
-  STA PLAYERX, X
-  LDX #$14
-  STA PLAYERX, X
+  STA charPosX
   LDA posy
-  STA PLAYERY
-  LDX #$04
-  STA PLAYERY, X
-  CLC
-  ADC #$08
-  LDX #$08
-  STA PLAYERY, X
-  LDX #$0C
-  STA PLAYERY, X
-  CLC
-  ADC #$08
-  LDX #$10
-  STA PLAYERY, X
-  LDX #$14
-  STA PLAYERY, X
-
-  ;; UPDATE BR sprites
+  STA charPosY
+  LDA #LOW(PLAYERX)
+  STA charSpriteX+0
+  LDA #HIGH(PLAYERX)
+  STA charSpriteX+1
+  LDA #LOW(PLAYERY)
+  STA charSpriteY+0
+  LDA #HIGH(PLAYERY)
+  STA charSpriteY+1
+  JSR UpdateCharactersSprites
+  ; update BR one
   LDA brOnePosX
-  STA BRONEX
+  STA charPosX
   LDA brOnePosY
-  STA BRONEY
-
+  STA charPosY
+  LDA #LOW(BRONEX)
+  STA charSpriteX+0
+  LDA #HIGH(BRONEX)
+  STA charSpriteX+1
+  LDA #LOW(BRONEY)
+  STA charSpriteY+0
+  LDA #HIGH(BRONEY)
+  STA charSpriteY+1
+  JSR UpdateCharactersSprites
+  ; update BR two
   LDA brsAmount
   CMP #$02
   BNE UpdateSpritesDone
   LDA brTwoPosX
-  STA BRTWOX
+  STA charPosX
   LDA brTwoPosY
-  STA BRTWOY
+  STA charPosY
+  LDA #LOW(BRTWOX)
+  STA charSpriteX+0
+  LDA #HIGH(BRTWOX)
+  STA charSpriteX+1
+  LDA #LOW(BRTWOY)
+  STA charSpriteY+0
+  LDA #HIGH(BRTWOY)
+  STA charSpriteY+1
+  JSR UpdateCharactersSprites
 UpdateSpritesDone:  
   RTS
- 
+
+UpdateCharactersSprites:
+  LDY #$00
+  LDA charPosX 
+  STA [charSpriteX], Y
+  LDY #$08
+  STA [charSpriteX], Y
+  LDY #$10
+  STA [charSpriteX], Y
+  CLC
+  ADC #$08
+  LDY #$04
+  STA [charSpriteX], Y
+  LDY #$0C
+  STA [charSpriteX], Y
+  LDY #$14
+  STA [charSpriteX], Y
+  LDA charPosY
+  LDY #$00
+  STA [charSpriteY], Y
+  LDY #$04
+  STA [charSpriteY], Y
+  CLC
+  ADC #$08
+  LDY #$08
+  STA [charSpriteY], Y
+  LDY #$0C
+  STA [charSpriteY], Y
+  CLC
+  ADC #$08
+  LDY #$10
+  STA [charSpriteY], Y
+  LDY #$14
+  STA [charSpriteY], Y
+  RTS
+
 DrawScore:
   ;;draw score on screen using background tiles
   ;;or using many sprites
@@ -1478,10 +1518,10 @@ bglvl03:
 
 palette:
   .db $0F,$29,$1A,$0F,  $0F,$36,$17,$0F,  $0F,$05,$16,$26,  $0F,$20,$00,$0F   ;;background palette
-  .db $0F,$13,$23,$33,  $0F,$02,$38,$3C,  $0F,$13,$23,$33,  $0F,$1C,$20,$2B   ;;sprite palette
+  .db $0F,$13,$23,$33,  $0F,$02,$38,$3C,  $0F,$1C,$37,$16,  $0F,$1C,$20,$2B   ;;sprite palette
 
 spritesTotalPerLvl: ;value multiplied by four because of attributes
-  .db $24, $1C, $1C
+  .db $34, $1C, $1C
 
 spritesLvl1:
      ;vert tile attr horiz
@@ -1491,8 +1531,15 @@ spritesLvl1:
   .db $88, $61, $03, $88
   .db $90, $70, $03, $80
   .db $90, $71, $03, $88
-  .db $63, $40, $00, $6C   ;BR 1
-  .db $63, $40, $00, $6C   ;BR 2
+  ; .db $63, $40, $00, $6C   ;BR 1
+  ;BR 1 full body
+  .db $73, $52, $02, $64
+  .db $73, $53, $02, $6C
+  .db $6B, $62, $02, $64
+  .db $6B, $63, $02, $6C
+  .db $63, $72, $02, $64
+  .db $63, $73, $02, $6C
+  ;.db $63, $40, $00, $6C   ;BR 2
   .db $63, $41, $03, $6C   ; exit
   ; .db $83, $41, $00, $6C   ;sprite 1
   ; .db $73, $41, $00, $8C   ;sprite 1
@@ -1565,11 +1612,11 @@ blocksLvl3:
   .db $04, $07, $8C, $73
 
 bladeRewindersTotalPerLvl:
-  .db $02, $01, $01
+  .db $01, $01, $01
 
 bladeRewindersLvl1:
   ; coorX, coorY, sprX, sprY
-  .db $06, $06, $6C, $63
+  .db $06, $06, $69, $53
   .db $06, $07, $7C, $5B
 
 bladeRewindersLvl2:
