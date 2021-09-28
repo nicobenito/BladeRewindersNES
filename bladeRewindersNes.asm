@@ -1508,7 +1508,7 @@ titleScreen:
   incbin "titlescreen1.nam"
 
 bglvl01:
-  incbin "bladeRewinderslvl01.nam"
+  incbin "bladeRewinderslvl01v2.nam"
 
 bglvl02:
   incbin "bladeRewinderslvl02.nam"
@@ -1517,11 +1517,11 @@ bglvl03:
   incbin "bladeRewinderslvl03.nam"
 
 palette:
-  .db $0F,$29,$1A,$0F,  $0F,$36,$17,$0F,  $0F,$05,$16,$26,  $0F,$20,$00,$0F   ;;background palette
-  .db $0F,$13,$23,$33,  $0F,$02,$38,$3C,  $0F,$1C,$37,$16,  $0F,$1C,$20,$2B   ;;sprite palette
+  .db $0F,$29,$01,$25,  $0F,$36,$17,$0F,  $0F,$05,$16,$26,  $0F,$20,$00,$0F   ;;background palette
+  .db $0F,$13,$23,$33,  $0F,$20,$10,$24,  $0F,$1C,$37,$16,  $0F,$1C,$37,$23   ;;sprite palette
 
 spritesTotalPerLvl: ;value multiplied by four because of attributes
-  .db $34, $1C, $1C
+  .db $50, $1C, $1C
 
 spritesLvl1:
      ;vert tile attr horiz
@@ -1540,7 +1540,15 @@ spritesLvl1:
   .db $63, $72, $02, $64
   .db $63, $73, $02, $6C
   ;.db $63, $40, $00, $6C   ;BR 2
-  .db $63, $41, $03, $6C   ; exit
+  ;.db $63, $41, $03, $6C   ; exit
+  .db $5F, $04, $01, $62
+  .db $5F, $05, $01, $6A
+  .db $5F, $06, $01, $72
+  .db $5F, $07, $01, $7A
+  .db $67, $14, $01, $62
+  .db $67, $15, $01, $6A
+  .db $67, $16, $01, $72
+  .db $67, $17, $01, $7A
   ; .db $83, $41, $00, $6C   ;sprite 1
   ; .db $73, $41, $00, $8C   ;sprite 1
   ; .db $8B, $41, $00, $9C   ;sprite 1
@@ -1696,4 +1704,4 @@ buttonsPositions:
   
   .bank 2
   .org $0000
-  .incbin "bladerewinder.chr"   ;includes 8KB graphics file from SMB1
+  .incbin "bladerewinderV2.chr"   ;includes 8KB graphics file from SMB1
