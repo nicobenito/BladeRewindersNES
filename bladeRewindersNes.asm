@@ -96,6 +96,12 @@ charPosX .rs 1
 charPosY .rs 1
 charSpriteX .rs 2
 charSpriteY .rs 2
+;ppu buffer
+;simple buffer text
+letterCursor .rs 1
+ppuCursorLow .rs 1
+ppuCursorHigh .rs 1
+writerWait .rs 1
 
 
 ;; DECLARE SOME CONSTANTS HERE
@@ -103,6 +109,7 @@ STATELOGO      = $03  ; display bencom logo screen
 STATETITLE     = $00  ; displaying title screen
 STATEPLAYING   = $01  ; move paddles/ball, check for collisions
 STATEGAMEOVER  = $02  ; displaying game over screen
+STATEINTRO     = $04  ; display intro text
 
 PLAYERY        = $0200
 PLAYERX        = $0203
@@ -115,9 +122,14 @@ BRTWOY         = $021C
 BRTWOX         = $021F
 CANTMOVE       = $10
 
+PPU_BUFFER     = $0400
+
 ; buttons
 PAUSEDBTN      = $01
 REWINDBTN      = $02
+
+; text
+TEXTSIZE       = $AA
 
 ;;;;;;;;;;;;;;;;;;
 
@@ -182,12 +194,18 @@ LoadPalettesLoop:
 
   LDA #$00
   STA levelNumber
+  STA letterCursor
 
-  JSR LoadLevel
+  LDA #$20
+  STA ppuCursorHigh
+  LDA #$41
+  STA ppuCursorLow
+
+  ; JSR LoadLevel
   ; LOADING TITLE SCREEN
-  ; LDA #$00
-  ; STA initialBGNumber
-  ; JSR LoadInitialBackground
+  LDA #$00
+  STA initialBGNumber
+  JSR LoadInitialBackground
   
   ; set screen player position
   LDA #$A3
@@ -214,8 +232,8 @@ LoadPalettesLoop:
 
 
 ;;:Set starting game state
-  ;LDA #STATELOGO
-  LDA #STATEPLAYING
+  LDA #STATELOGO
+  ;LDA #STATEPLAYING
   STA gamestate
 
 
@@ -237,7 +255,8 @@ NMI:
   LDA #$02
   STA $4014       ; set the high byte (02) of the RAM address, start the transfer
 
-  JSR DrawScore
+  ; JSR DrawScore
+  JSR BufferToPPU
 
   ;;This is the PPU clean up section, so rendering the next frame starts properly.
   LDA #%10010000   ; enable NMI, sprites from Pattern Table 0, background from Pattern Table 1
@@ -270,6 +289,10 @@ GameEngine:
   LDA gamestate
   CMP #STATEPLAYING
   BEQ EnginePlaying   ;;game is playing
+
+  LDA gamestate
+  CMP #STATEINTRO
+  BEQ EngineIntro
 GameEngineDone:  
   
   JSR UpdateSprites
@@ -287,7 +310,7 @@ EngineLogo: ; need to fix timer
   ; BEQ EngineLogoDone ;btn not pressed
   LDA #$01
   STA initialBGNumber
-  LDA gamestate
+  ; LDA gamestate
   ; turn PPU off
   LDA #$00
   STA $2001
@@ -306,21 +329,21 @@ EngineTitle:
   ;;  set starting paddle/ball position
   ;;  go to Playing State
   ;;  turn screen on
-  ReadStartBtn:
+ReadStartBtn:
   LDA buttons1
   AND #%00010000
   BEQ ReadStartBtnDone ;btn not pressed
+  LDA #$02
+  STA initialBGNumber
+  ; LDA gamestate
   ; turn PPU off
   LDA #$00
   STA $2001
-  JSR LoadLevel
-  ; LDA #%00011110   ; enable sprites, enable background, no clipping on left side
-  ; STA $2001
-  LDA #STATEPLAYING
+  JSR LoadInitialBackground
+  LDA #STATEINTRO
   STA gamestate
-  ReadStartBtnDone:
+ReadStartBtnDone:
   JMP GameEngineDone
-
 ;;;;;;;;; 
  
 EngineGameOver:
@@ -332,7 +355,29 @@ EngineGameOver:
   JMP GameEngineDone
  
 ;;;;;;;;;;;
- 
+
+EngineIntro:
+  LDA writerWait
+  CLC
+  ADC #$01
+  STA writerWait
+  LDA letterCursor
+  CMP #TEXTSIZE
+  BNE ReadIntroStartBtnDone
+ReadIntroStartBtn:
+  LDA buttons1
+  AND #%00010000
+  BEQ ReadIntroStartBtnDone ;btn not pressed
+  ; LDA gamestate
+  ; turn PPU off
+  LDA #$00
+  STA $2001
+  JSR LoadLevel
+  LDA #STATEPLAYING
+  STA gamestate
+ReadIntroStartBtnDone:
+  JMP GameEngineDone
+
 EnginePlaying:
 ; check if player has lost, if yes, skip read arrows and only read Start for reset.
   LDA #$00
@@ -637,7 +682,59 @@ DrawScore:
   ;;draw score on screen using background tiles
   ;;or using many sprites
   RTS
- 
+
+BufferToPPU:
+  ; reads buffer
+  ; if zero, done
+  ; set count with length value
+  ; set high and low byte
+  ; loop comparing against count and filling ppu
+
+  LDA gamestate
+  CMP #STATEINTRO
+  BNE BufferDone
+  LDA writerWait
+  CMP #$05
+  BNE BufferDone
+  LDA #$00
+  STA writerWait
+  ; read ppu cursor
+  LDA letterCursor
+  CMP #TEXTSIZE
+  BEQ BufferDone
+  ; set ppu address
+  LDA $2002             ; read PPU status to reset the high/low latch
+  LDA ppuCursorHigh
+  STA $2006             ; write the high byte of $2000 address
+  LDA ppuCursorLow
+  STA $2006             ; write the low byte of $2000 address
+  ; read letter buffer with letter cursor
+  LDY letterCursor
+  LDA #LOW(firstText)
+  STA pointerLo
+  LDA #HIGH(firstText)
+  STA pointerHi
+  LDA [pointerLo], Y
+  STA $2007
+  ; if 'space' add 1 to cursor
+  ; if 'break' add 1 to high ppu?
+  ; write to PPu
+  ; add 1 to ppu cursor and 1 to letter buffer
+  LDA letterCursor
+  ADC #$01
+  STA letterCursor
+  LDA ppuCursorLow
+  ADC #$01
+  STA ppuCursorLow
+  CMP #$00
+  BNE BufferDone
+  LDA ppuCursorHigh
+  CLC
+  ADC #$01
+  STA ppuCursorHigh
+BufferDone:
+  RTS
+
 CheckNextPosition:
   LDA #$01
   STA canMove
@@ -1437,6 +1534,11 @@ InitialInsideLoop:
   CPX #$04
   BNE InitialOutsideLoop     ; run the outside loop 256 times before continuing down
   RTS
+
+;;;;;;;;;;;;
+;;;;;;;;;;;;
+; Text ENGINE
+
 ;;;;;;;;;;;;
 ;;;;;;;;;;;;;
 ; SQR ROUTINE
@@ -1506,6 +1608,9 @@ logoScreen:
 
 titleScreen:
   incbin "titlescreen1.nam"
+
+intro1:
+  incbin "intro1.nam"
 
 bglvl01:
   incbin "bladeRewinderslvl01v2.nam"
@@ -1657,6 +1762,10 @@ buttonsLvl1:
 initialScreenPointers:
   .dw logoScreen
   .dw titleScreen
+  .dw intro1
+
+introTextPointers:
+  .dw intro1
 
 bgLevelsPointers:
   .dw bglvl01
@@ -1690,7 +1799,21 @@ exitsPositions:
 
 buttonsPositions:
   .dw buttonsLvl1
-  
+
+;;;;;
+;TEXTS
+;;;;;
+
+firstText2:
+  .db $0B, $15, $0A, $0D, $0E, $24, $1B, $0E, $20, $12, $17, $0D, $0E, $1B, $1C, $24, $16, $0E, $1C, $1C, $0A, $10, $0E, $24, $0B, $1E, $12, $15, $0D, $0E, $1B, $24, $0F, $12, $1B, $1C, $1D, $24, $1D, $0E, $1C, $1D
+
+firstText:
+  .db $0E, $17, $24, $15, $0A, $24, $0D, $0E, $0C, $0A, $0D, $0A, $24, $0D, $0E, $24, $15, $18, $1C, $24, $09, $00, $24, $0E, $15, $24, $1F, $11, $1C, $24, $24, $24, $0E, $1B, $0A, $24, $1C, $12, $17, $18, $17, $12
+  .db $16, $18, $24, $0D, $0E, $24, $0E, $17, $1D, $1B, $0E, $1D, $0E, $17, $12, $16, $12, $0E, $17, $1D, $24, $24, $18, $24, $0D, $0E, $0B, $12, $0D, $18, $24, $0A, $24, $15, $0A, $24, $12, $16, $19, $0A, $1B, $0A
+  .db $0B, $15, $0E, $24, $0D, $0E, $16, $0A, $17, $0D, $24, $24, $0A, $24, $17, $12, $17, $10, $1E, $17, $24, $1F, $12, $0D, $0E, $18, $0C, $15, $1E, $0B, $24, $1D, $0E, $17, $12, $0A, $24, $1D, $12, $0E, $16, $19
+  .db $24, $24, $18, $24, $1C, $1E, $0F, $12, $0C, $12, $0E, $17, $1D, $0E, $24, $0D, $0E, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $1B, $24, $1C, $1E, $1C, $24, $24, $24, $19, $0E, $15, $12, $0C, $1E, $15, $0A, $1C
+
+
   .org $FFFA     ;first of the three vectors starts here
   .dw NMI        ;when an NMI happens (once per frame if enabled) the 
                    ;processor will jump to the label NMI:
