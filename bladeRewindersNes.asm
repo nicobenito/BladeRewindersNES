@@ -102,6 +102,10 @@ letterCursor .rs 1
 ppuCursorLow .rs 1
 ppuCursorHigh .rs 1
 writerWait .rs 1
+; sound
+sound_ptr .rs 2
+jmp_ptr .rs 2           ;a pointer variable for indirect jumps
+current_song .rs 1
 
 
 ;; DECLARE SOME CONSTANTS HERE
@@ -136,8 +140,18 @@ TEXTSIZE       = $AA
 
 
 
+  ; .bank 0
+  ; .org $C000 
+;----- first 8k bank of PRG-ROM
   .bank 0
-  .org $C000 
+  .org $8000  ;we have two 16k PRG banks now.  We will stick our sound engine in the first one, which starts at $8000.
+  
+  .include "sound_engine.asm"
+
+;----- second 8k bank of PRG-ROM    
+  ; .bank 1
+  ; .org $A000
+
 RESET:
   SEI          ; disable IRQs
   CLD          ; disable decimal mode
@@ -172,6 +186,12 @@ vblankwait2:      ; Second wait for vblank, PPU is ready after this
   BIT $2002
   BPL vblankwait2
 
+;Enable sound channels
+  jsr sound_init
+  
+  lda #$01
+  sta current_song
+
 
 LoadPalettes:
   LDA $2002             ; read PPU status to reset the high/low latch
@@ -192,8 +212,9 @@ LoadPalettesLoop:
   BNE LoadPalettesLoop  ; Branch to LoadPalettesLoop if compare was Not Equal to zero
                         ; if compare was equal to 32, keep going down
 
-  LDA #$00
+  LDA #$00 ;lvl number - 1
   STA levelNumber
+  LDA #$00
   STA letterCursor
 
   LDA #$20
@@ -201,11 +222,12 @@ LoadPalettesLoop:
   LDA #$41
   STA ppuCursorLow
 
-  ; JSR LoadLevel
+  ;deactive intial screens
+  JSR LoadLevel
   ; LOADING TITLE SCREEN
-  LDA #$00
-  STA initialBGNumber
-  JSR LoadInitialBackground
+  ;LDA #$00
+  ;STA initialBGNumber
+  ;JSR LoadInitialBackground
   
   ; set screen player position
   LDA #$A3
@@ -232,8 +254,8 @@ LoadPalettesLoop:
 
 
 ;;:Set starting game state
-  LDA #STATELOGO
-  ;LDA #STATEPLAYING
+  ;LDA #STATELOGO
+  LDA #STATEPLAYING
   STA gamestate
 
 
@@ -268,7 +290,8 @@ NMI:
   STA $2005
     
   ;;;all graphics updates done by here, run game engine
-
+  jsr sound_play_frame    ;run our sound engine after all drawing code is done. 
+                            ;this ensures our sound engine gets run once per frame.
 
   JSR ReadController1  ;;get the current button data for player 1
   JSR ReadController2  ;;get the current button data for player 2
@@ -564,6 +587,9 @@ ReadUpBtnDone:
   LDA playerHasMove
   CMP #$01
   BNE StoreMovement
+  ; sound movement
+  LDA #$02
+  JSR sound_load
   JSR CheckIfExit
   LDA playerCoorX
   STA currentCharacterCoorX
@@ -1148,7 +1174,10 @@ MoveDone:
   JSR CheckForButtons
   LDA currentCharacterPaused
   STA brCurrentPaused
+  CMP #$01
+  BEQ AvoidCheckPlayer
   JSR CheckForPlayer
+AvoidCheckPlayer:
   RTS
 
 CheckForPlayer:
@@ -1616,7 +1645,7 @@ bglvl01:
   incbin "bladeRewinderslvl01v2.nam"
 
 bglvl02:
-  incbin "bladeRewinderslvl02.nam"
+  incbin "lvl2.nam"
 
 bglvl03:
   incbin "bladeRewinderslvl03.nam"
@@ -1626,7 +1655,7 @@ palette:
   .db $0F,$13,$23,$33,  $0F,$20,$10,$24,  $0F,$1C,$37,$16,  $0F,$1C,$37,$23   ;;sprite palette
 
 spritesTotalPerLvl: ;value multiplied by four because of attributes
-  .db $50, $1C, $1C
+  .db $50, $70, $1C
 
 spritesLvl1:
      ;vert tile attr horiz
@@ -1666,9 +1695,31 @@ spritesLvl2:
   .db $88, $61, $03, $88
   .db $90, $70, $03, $80
   .db $90, $71, $03, $88
-  .db $63, $40, $00, $6C   ;BR 1
+  ;BR 1 full body
+  .db $73, $52, $02, $64
+  .db $73, $53, $02, $6C
+  .db $6B, $62, $02, $64
+  .db $6B, $63, $02, $6C
+  .db $63, $72, $02, $64
+  .db $63, $73, $02, $6C
   ; .db $83, $41, $00, $6C   ;sprite 1
   ; .db $8B, $41, $00, $9C   ;sprite 1
+  .db $67, $04, $01, $92 ; exit
+  .db $67, $05, $01, $9A
+  .db $67, $06, $01, $A2
+  .db $67, $07, $01, $AA
+  .db $6F, $14, $01, $92
+  .db $6F, $15, $01, $9A
+  .db $6F, $16, $01, $A2
+  .db $6F, $17, $01, $AA
+  .db $98, $20, $01, $32 ; pause btn
+  .db $98, $21, $01, $3A
+  .db $98, $22, $01, $42
+  .db $98, $23, $01, $4A
+  .db $A0, $30, $01, $32
+  .db $A0, $31, $01, $3A
+  .db $A0, $32, $01, $42
+  .db $A0, $33, $01, $4A
 
 spritesLvl3:
      ;vert tile attr horiz
@@ -1700,16 +1751,17 @@ blocksLvl1:
   .db $02, $05, $8C, $73
 
 blocksLvl2:
-  .db $03, $02, $6C, $83
-  .db $03, $03, $8C, $73
-  .db $03, $04, $6C, $83
-  .db $03, $05, $8C, $73
-  .db $03, $06, $8C, $73
+  .db $03, $03, $6C, $83  
+  .db $02, $02, $6C, $83
+  ; .db $03, $02, $6C, $83
+  .db $04, $06, $6C, $83
+  .db $05, $01, $8C, $73
   .db $05, $02, $6C, $83
   .db $05, $03, $8C, $73
-  .db $05, $04, $6C, $83
-  .db $05, $05, $8C, $73
+  .db $05, $04, $8C, $73
+  .db $05, $05, $6C, $83
   .db $05, $06, $8C, $73
+  .db $05, $07, $6C, $83
 
 blocksLvl3:
   .db $02, $01, $6C, $83
@@ -1734,8 +1786,7 @@ bladeRewindersLvl1:
 
 bladeRewindersLvl2:
   ; coorX, coorY, sprX, sprY
-  .db $02, $07, $BC, $7B
-  .db $06, $05, $5C, $6B
+  .db $02, $03, $79, $8B
 
 bladeRewindersLvl3:
   ; coorX, coorY, sprX, sprY
@@ -1750,14 +1801,18 @@ exitsPosLvl1:
   .db $06, $06
 
 exitsPosLvl2:
-  .db $06, $03
+  .db $04, $07
 
 buttonsPerLevelTotal:
-  .db $01, $00, $00
+  .db $01, $01, $00
 
 buttonsLvl1:
   ; X, Y, type (1=pause, 2=rewind, 3=exit?)
   .db $03, $03, $01
+
+buttonsLvl2:
+  ; X, Y, type (1=pause, 2=rewind, 3=exit?)
+  .db $04, $01, $01
 
 initialScreenPointers:
   .dw logoScreen
@@ -1799,6 +1854,7 @@ exitsPositions:
 
 buttonsPositions:
   .dw buttonsLvl1
+  .dw buttonsLvl2
 
 ;;;;;
 ;TEXTS
