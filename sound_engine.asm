@@ -393,7 +393,7 @@ se_set_apu:
     rts
     
     
-NUM_SONGS = $07 ;if you add a new song, change this number.    
+NUM_SONGS = $0A ;if you add a new song, change this number.    
                 ;the main asm file checks this number in its song_up and song_down subroutines
                 ;to determine when to wrap around.
 
@@ -406,6 +406,9 @@ song_headers:
     .word song4_header  ;a new song taking advantage of note lengths and rests
     .word song5_header  ;another sound effect played at a very fast tempo.
     .word song6_header
+    .word pause_header  ;pause button sound
+    .word catch_header
+    .word logo1_header
     
     .include "sound_opcodes.asm"    ;our opcode subroutines, jump table and aliases
     .include "note_table.i" ;period lookup table for notes
@@ -418,3 +421,6 @@ song_headers:
     .include "song4.i"
     .include "song5.i"
     .include "song6.i"
+    .include "pause1.i"
+    .include "catch1.i"
+    .include "logo1.i"

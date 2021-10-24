@@ -223,11 +223,11 @@ LoadPalettesLoop:
   STA ppuCursorLow
 
   ;deactive intial screens
-  JSR LoadLevel
+  ; JSR LoadLevel
   ; LOADING TITLE SCREEN
-  ;LDA #$00
-  ;STA initialBGNumber
-  ;JSR LoadInitialBackground
+  LDA #$00
+  STA initialBGNumber
+  JSR LoadInitialBackground
   
   ; set screen player position
   LDA #$A3
@@ -254,8 +254,8 @@ LoadPalettesLoop:
 
 
 ;;:Set starting game state
-  ;LDA #STATELOGO
-  LDA #STATEPLAYING
+  LDA #STATELOGO
+  ;LDA #STATEPLAYING
   STA gamestate
 
 
@@ -340,6 +340,8 @@ EngineLogo: ; need to fix timer
   JSR LoadInitialBackground
   LDA #STATETITLE
   STA gamestate
+  LDA #$09
+  JSR sound_load
 EngineLogoDone:
   JMP GameEngineDone
 
@@ -840,6 +842,9 @@ CheckButtonsLoop:
   BEQ ButtonsLoopDone
   LDA #$01
   STA currentCharacterPaused
+  ;pause sound
+  LDA #$07
+  JSR sound_load
   RTS
 CheckRewindBtn:
   CMP #REWINDBTN
@@ -1213,6 +1218,8 @@ DoneWithY:
   BNE CheckPlayerDone
   LDA #$01
   STA playerLost
+  LDA #$08
+  JSR sound_load
 CheckPlayerDone:
   RTS
 
