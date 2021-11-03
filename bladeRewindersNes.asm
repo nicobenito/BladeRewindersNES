@@ -212,7 +212,7 @@ LoadPalettesLoop:
   BNE LoadPalettesLoop  ; Branch to LoadPalettesLoop if compare was Not Equal to zero
                         ; if compare was equal to 32, keep going down
 
-  LDA #$03 ;lvl number - 1
+  LDA #$04 ;lvl number - 1
   STA levelNumber
   LDA #$00
   STA letterCursor
@@ -1739,7 +1739,7 @@ bglvl04:
   incbin "lvl4.nam"
 
 bglvl05:
-  incbin "bladeRewinderslvl01v2.nam"
+  incbin "lvl5.nam"
 
 bglvl06:
   incbin "bladeRewinderslvl01v2.nam"
@@ -1869,7 +1869,7 @@ palette:
 ;   .db $67, $17, $01, $7A
 
 blocksTotalPerLvl: ;no need to multiply, I'm jumping over extra values
-  .db $05, $0A, $0D, $05, $05, $05, $05
+  .db $05, $0A, $0D, $05, $0A, $05, $05
 
 blocksLvl1:
       ;x   y
@@ -1920,19 +1920,31 @@ blocksLvl4:
 
 blocksLvl5:
       ;x   y
-  .db $02, $02, $6C, $83
-  .db $04, $02, $8C, $73
-  .db $04, $04, $8C, $73
-  .db $04, $06, $6C, $83
-  .db $02, $05, $8C, $73
+  .db $03, $05, $6C, $83
+  .db $03, $02, $8C, $73
+  .db $04, $02, $6C, $83
+  .db $04, $03, $6C, $83
+  .db $01, $03, $8C, $73
+  .db $01, $04, $8C, $73
+  .db $01, $05, $8C, $73
+  .db $05, $05, $8C, $73
+  .db $05, $07, $8C, $73
+  .db $06, $07, $8C, $73
 
 blocksLvl6:
       ;x   y
-  .db $02, $02, $6C, $83
-  .db $04, $02, $8C, $73
-  .db $04, $04, $8C, $73
-  .db $04, $06, $6C, $83
-  .db $02, $05, $8C, $73
+  .db $03, $05, $6C, $83
+  .db $03, $01, $6C, $83
+  .db $03, $02, $8C, $73
+  .db $04, $01, $8C, $73
+  .db $04, $02, $6C, $83
+  .db $01, $03, $8C, $73
+  .db $01, $04, $8C, $73
+  .db $01, $05, $8C, $73
+  .db $05, $04, $8C, $73
+  .db $05, $05, $8C, $73
+  .db $05, $07, $8C, $73
+  .db $06, $07, $8C, $73
 
 bladeRewindersTotalPerLvl:
   .db $01, $01, $01, $01, $01, $01
@@ -1956,7 +1968,7 @@ bladeRewindersLvl4:
 
 bladeRewindersLvl5:
   ; coorX, coorY, sprX, sprY
-  .db $06, $06, $69, $53
+  .db $05, $06, $79, $5B
 
 bladeRewindersLvl6:
   ; coorX, coorY, sprX, sprY
@@ -1966,9 +1978,9 @@ initialPlayerPosLvl1:
   ; coorx. coory, X, Y
   .db $01, $01, $68, $A3
 
-initialPlayerPosLvl3:
+initialPlayerPosLvl5:
   ; coorx. coory, X, Y
-  .db $03, $01, $48, $93
+  .db $02, $02, $68, $93
 
 exitsPosLvl1:
   ; X, Y
@@ -1987,7 +1999,7 @@ exitsPosLvl4:
 
 exitsPosLvl5:
   ; X, Y
-  .db $06, $06
+  .db $02, $07
 
 exitsPosLvl6:
   ; X, Y
@@ -2014,7 +2026,7 @@ buttonsLvl4:
 
 buttonsLvl5:
   ; X, Y, type (1=pause, 2=rewind, 3=exit?)
-  .db $03, $03, $01
+  .db $01, $06, $01
 
 buttonsLvl6:
   ; X, Y, type (1=pause, 2=rewind, 3=exit?)
@@ -2060,7 +2072,7 @@ playerInitialPositions:
   .dw initialPlayerPosLvl1
   .dw initialPlayerPosLvl1
   .dw initialPlayerPosLvl1
-  .dw initialPlayerPosLvl1
+  .dw initialPlayerPosLvl5
   .dw initialPlayerPosLvl1
 
 exitsPositions:
