@@ -212,7 +212,7 @@ LoadPalettesLoop:
   BNE LoadPalettesLoop  ; Branch to LoadPalettesLoop if compare was Not Equal to zero
                         ; if compare was equal to 32, keep going down
 
-  LDA #$00 ;lvl number - 1
+  LDA #$03 ;lvl number - 1
   STA levelNumber
   LDA #$00
   STA letterCursor
@@ -223,11 +223,12 @@ LoadPalettesLoop:
   STA ppuCursorLow
 
   ;deactive intial screens
-  ; JSR LoadLevel
+  JSR LoadLevel
+  
   ; LOADING TITLE SCREEN
-  LDA #$00
-  STA initialBGNumber
-  JSR LoadInitialBackground
+  ; LDA #$00
+  ; STA initialBGNumber
+  ; JSR LoadInitialBackground
   
   ; set screen player position
   LDA #$A3
@@ -254,8 +255,8 @@ LoadPalettesLoop:
 
 
 ;;:Set starting game state
-  LDA #STATELOGO
-  ;LDA #STATEPLAYING
+  ;LDA #STATELOGO
+  LDA #STATEPLAYING
   STA gamestate
 
 
@@ -1633,36 +1634,9 @@ dloop1:
 	BNE	dloop2
 TimeWaitDone:
 	RTS
-;;;;;;;;;;;;;
-  
-  
-  .bank 1
-  .org $E000
-
-logoScreen:
-  incbin "logoscreen1.nam"
-
-titleScreen:
-  incbin "titlescreen1.nam"
-
-intro1:
-  incbin "intro1.nam"
-
-bglvl01:
-  incbin "bladeRewinderslvl01v2.nam"
-
-bglvl02:
-  incbin "lvl2.nam"
-
-bglvl03:
-  incbin "bladeRewinderslvl03.nam"
-
-palette:
-  .db $0F,$29,$01,$25,  $0F,$36,$17,$0F,  $0F,$05,$16,$26,  $0F,$20,$00,$0F   ;;background palette
-  .db $0F,$13,$23,$33,  $0F,$20,$10,$24,  $0F,$1C,$37,$16,  $0F,$1C,$37,$23   ;;sprite palette
-
+;;;;;; level sprites data
 spritesTotalPerLvl: ;value multiplied by four because of attributes
-  .db $50, $70, $1C
+  .db $50, $70, $50, $50, $50, $50
 
 spritesLvl1:
      ;vert tile attr horiz
@@ -1719,35 +1693,183 @@ spritesLvl2:
   .db $6F, $15, $01, $9A
   .db $6F, $16, $01, $A2
   .db $6F, $17, $01, $AA
-  .db $98, $20, $01, $32 ; pause btn
-  .db $98, $21, $01, $3A
-  .db $98, $22, $01, $42
-  .db $98, $23, $01, $4A
-  .db $A0, $30, $01, $32
-  .db $A0, $31, $01, $3A
-  .db $A0, $32, $01, $42
-  .db $A0, $33, $01, $4A
+  ; .db $98, $20, $01, $32 ; pause btn
+  ; .db $98, $21, $01, $3A
+  ; .db $98, $22, $01, $42
+  ; .db $98, $23, $01, $4A
+  ; .db $A0, $30, $01, $32
+  ; .db $A0, $31, $01, $3A
+  ; .db $A0, $32, $01, $42
+  ; .db $A0, $33, $01, $4A
 
-spritesLvl3:
-     ;vert tile attr horiz
-  .db $80, $50, $03, $80
-  .db $80, $51, $03, $88
-  .db $88, $60, $03, $80
-  .db $88, $61, $03, $88
-  .db $90, $70, $03, $80
-  .db $90, $71, $03, $88
-  .db $63, $40, $00, $6C   ;BR 1
-  ; .db $83, $41, $00, $4C   ;sprite 1
-  ; .db $7B, $41, $00, $5C   ;sprite 1
-  ; .db $73, $41, $00, $6C   ;sprite 1
-  ; .db $6B, $41, $00, $7C   ;sprite 1
-  ; .db $93, $41, $00, $6C   ;sprite 1
-  ; .db $8B, $41, $00, $7C   ;sprite 1
-  ; .db $83, $41, $00, $8C   ;sprite 1
-  ; .db $7B, $41, $00, $9C   ;sprite 1
+spritesPointers:
+  .dw spritesLvl2
+  .dw spritesLvl2
+  .dw spritesLvl2
+  .dw spritesLvl2
+  .dw spritesLvl2
+  .dw spritesLvl2
+  .dw spritesLvl2
+
+;;;;;;;;;;;;;
+  
+  
+  .bank 1
+  .org $E000
+
+; logoScreen:
+;   incbin "logoscreen1.nam"
+
+titleScreen:
+  incbin "titlescreen1.nam"
+
+; intro1:
+;   incbin "intro1.nam"
+
+bglvl01:
+  incbin "bladeRewinderslvl01v2.nam"
+
+bglvl02:
+  incbin "lvl2.nam"
+
+bglvl03:
+  incbin "lvl3.nam"
+
+bglvl04:
+  incbin "lvl4.nam"
+
+bglvl05:
+  incbin "bladeRewinderslvl01v2.nam"
+
+bglvl06:
+  incbin "bladeRewinderslvl01v2.nam"
+
+palette:
+  .db $0F,$29,$01,$25,  $0F,$36,$17,$0F,  $0F,$05,$16,$26,  $0F,$20,$00,$0F   ;;background palette
+  .db $0F,$13,$23,$33,  $0F,$20,$10,$24,  $0F,$1C,$37,$16,  $0F,$1C,$37,$23   ;;sprite palette
+
+; spritesLvl1:
+;      ;vert tile attr horiz
+;   .db $80, $50, $03, $80
+;   .db $80, $51, $03, $88
+;   .db $88, $60, $03, $80
+;   .db $88, $61, $03, $88
+;   .db $90, $70, $03, $80
+;   .db $90, $71, $03, $88
+;   ; .db $63, $40, $00, $6C   ;BR 1
+;   ;BR 1 full body
+;   .db $73, $52, $02, $64
+;   .db $73, $53, $02, $6C
+;   .db $6B, $62, $02, $64
+;   .db $6B, $63, $02, $6C
+;   .db $63, $72, $02, $64
+;   .db $63, $73, $02, $6C
+;   ;.db $63, $40, $00, $6C   ;BR 2
+;   ;.db $63, $41, $03, $6C   ; exit
+;   .db $5F, $04, $01, $62
+;   .db $5F, $05, $01, $6A
+;   .db $5F, $06, $01, $72
+;   .db $5F, $07, $01, $7A
+;   .db $67, $14, $01, $62
+;   .db $67, $15, $01, $6A
+;   .db $67, $16, $01, $72
+;   .db $67, $17, $01, $7A
+;   ; .db $83, $41, $00, $6C   ;sprite 1
+;   ; .db $73, $41, $00, $8C   ;sprite 1
+;   ; .db $8B, $41, $00, $9C   ;sprite 1
+
+;   spritesLvl4:
+;      ;vert tile attr horiz
+;   .db $80, $50, $03, $80
+;   .db $80, $51, $03, $88
+;   .db $88, $60, $03, $80
+;   .db $88, $61, $03, $88
+;   .db $90, $70, $03, $80
+;   .db $90, $71, $03, $88
+;   ; .db $63, $40, $00, $6C   ;BR 1
+;   ;BR 1 full body
+;   .db $73, $52, $02, $64
+;   .db $73, $53, $02, $6C
+;   .db $6B, $62, $02, $64
+;   .db $6B, $63, $02, $6C
+;   .db $63, $72, $02, $64
+;   .db $63, $73, $02, $6C
+;   ;.db $63, $40, $00, $6C   ;BR 2
+;   ;.db $63, $41, $03, $6C   ; exit
+;   .db $5F, $04, $01, $62
+;   .db $5F, $05, $01, $6A
+;   .db $5F, $06, $01, $72
+;   .db $5F, $07, $01, $7A
+;   .db $67, $14, $01, $62
+;   .db $67, $15, $01, $6A
+;   .db $67, $16, $01, $72
+;   .db $67, $17, $01, $7A
+;   ; .db $83, $41, $00, $6C   ;sprite 1
+;   ; .db $73, $41, $00, $8C   ;sprite 1
+;   ; .db $8B, $41, $00, $9C   ;sprite 1
+
+; spritesLvl2:
+;      ;vert tile attr horiz
+;   .db $80, $50, $03, $80
+;   .db $80, $51, $03, $88
+;   .db $88, $60, $03, $80
+;   .db $88, $61, $03, $88
+;   .db $90, $70, $03, $80
+;   .db $90, $71, $03, $88
+;   ;BR 1 full body
+;   .db $73, $52, $02, $64
+;   .db $73, $53, $02, $6C
+;   .db $6B, $62, $02, $64
+;   .db $6B, $63, $02, $6C
+;   .db $63, $72, $02, $64
+;   .db $63, $73, $02, $6C
+;   ; .db $83, $41, $00, $6C   ;sprite 1
+;   ; .db $8B, $41, $00, $9C   ;sprite 1
+;   .db $67, $04, $01, $92 ; exit
+;   .db $67, $05, $01, $9A
+;   .db $67, $06, $01, $A2
+;   .db $67, $07, $01, $AA
+;   .db $6F, $14, $01, $92
+;   .db $6F, $15, $01, $9A
+;   .db $6F, $16, $01, $A2
+;   .db $6F, $17, $01, $AA
+;   .db $98, $20, $01, $32 ; pause btn
+;   .db $98, $21, $01, $3A
+;   .db $98, $22, $01, $42
+;   .db $98, $23, $01, $4A
+;   .db $A0, $30, $01, $32
+;   .db $A0, $31, $01, $3A
+;   .db $A0, $32, $01, $42
+;   .db $A0, $33, $01, $4A
+
+; spritesLvl3:
+;   .db $80, $50, $03, $80
+;   .db $80, $51, $03, $88
+;   .db $88, $60, $03, $80
+;   .db $88, $61, $03, $88
+;   .db $90, $70, $03, $80
+;   .db $90, $71, $03, $88
+;   ; .db $63, $40, $00, $6C   ;BR 1
+;   ;BR 1 full body
+;   .db $73, $52, $02, $64
+;   .db $73, $53, $02, $6C
+;   .db $6B, $62, $02, $64
+;   .db $6B, $63, $02, $6C
+;   .db $63, $72, $02, $64
+;   .db $63, $73, $02, $6C
+;   ;.db $63, $40, $00, $6C   ;BR 2
+;   ;.db $63, $41, $03, $6C   ; exit
+;   .db $5F, $04, $01, $62
+;   .db $5F, $05, $01, $6A
+;   .db $5F, $06, $01, $72
+;   .db $5F, $07, $01, $7A
+;   .db $67, $14, $01, $62
+;   .db $67, $15, $01, $6A
+;   .db $67, $16, $01, $72
+;   .db $67, $17, $01, $7A
 
 blocksTotalPerLvl: ;no need to multiply, I'm jumping over extra values
-  .db $05, $0A, $0B
+  .db $05, $0A, $0D, $05, $05, $05, $05
 
 blocksLvl1:
       ;x   y
@@ -1771,25 +1893,54 @@ blocksLvl2:
   .db $05, $07, $6C, $83
 
 blocksLvl3:
-  .db $02, $01, $6C, $83
-  .db $02, $02, $8C, $73
-  .db $02, $03, $8C, $73
-  .db $02, $04, $6C, $83
+  .db $07, $01, $00, $00
+  .db $07, $02, $00, $00
+  ;.db $06, $03, $00, $00
+  .db $06, $04, $00, $00
+  .db $06, $05, $00, $00
+  .db $06, $06, $00, $00
+  .db $06, $07, $00, $00
+  .db $02, $02, $00, $00
+  .db $04, $02, $00, $00
+  .db $02, $04, $00, $00
+  .db $04, $04, $00, $00
+  ;.db $05, $04, $00, $00
+  .db $04, $06, $00, $00
+  .db $05, $06, $00, $00
+  .db $02, $06, $00, $00
+  .db $01, $07, $00, $00
+
+blocksLvl4:
+      ;x   y
+  .db $05, $02, $6C, $83
   .db $02, $05, $8C, $73
-  .db $04, $01, $8C, $73
-  .db $04, $02, $6C, $83
-  .db $04, $03, $8C, $73
+  .db $03, $06, $8C, $73
+  .db $04, $04, $6C, $83
+  .db $05, $05, $8C, $73
+
+blocksLvl5:
+      ;x   y
+  .db $02, $02, $6C, $83
+  .db $04, $02, $8C, $73
   .db $04, $04, $8C, $73
   .db $04, $06, $6C, $83
-  .db $04, $07, $8C, $73
+  .db $02, $05, $8C, $73
+
+blocksLvl6:
+      ;x   y
+  .db $02, $02, $6C, $83
+  .db $04, $02, $8C, $73
+  .db $04, $04, $8C, $73
+  .db $04, $06, $6C, $83
+  .db $02, $05, $8C, $73
 
 bladeRewindersTotalPerLvl:
-  .db $01, $01, $01
+  .db $01, $01, $01, $01, $01, $01
 
 bladeRewindersLvl1:
   ; coorX, coorY, sprX, sprY
   .db $06, $06, $69, $53
-  .db $06, $07, $7C, $5B
+  ;.db $06, $07, $7C, $5B
 
 bladeRewindersLvl2:
   ; coorX, coorY, sprX, sprY
@@ -1797,11 +1948,27 @@ bladeRewindersLvl2:
 
 bladeRewindersLvl3:
   ; coorX, coorY, sprX, sprY
-  .db $06, $05, $5C, $6B
+  .db $01, $06, $B9, $7B
+
+bladeRewindersLvl4:
+  ; coorX, coorY, sprX, sprY
+  .db $06, $01, $19, $7B
+
+bladeRewindersLvl5:
+  ; coorX, coorY, sprX, sprY
+  .db $06, $06, $69, $53
+
+bladeRewindersLvl6:
+  ; coorX, coorY, sprX, sprY
+  .db $06, $06, $69, $53
 
 initialPlayerPosLvl1:
   ; coorx. coory, X, Y
   .db $01, $01, $68, $A3
+
+initialPlayerPosLvl3:
+  ; coorx. coory, X, Y
+  .db $03, $01, $48, $93
 
 exitsPosLvl1:
   ; X, Y
@@ -1810,8 +1977,24 @@ exitsPosLvl1:
 exitsPosLvl2:
   .db $04, $07
 
+exitsPosLvl3:
+  ; X, Y
+  .db $03, $05
+
+exitsPosLvl4:
+  ; X, Y
+  .db $05, $06
+
+exitsPosLvl5:
+  ; X, Y
+  .db $06, $06
+
+exitsPosLvl6:
+  ; X, Y
+  .db $06, $06
+
 buttonsPerLevelTotal:
-  .db $01, $01, $00
+  .db $01, $01, $01, $01, $01, $01
 
 buttonsLvl1:
   ; X, Y, type (1=pause, 2=rewind, 3=exit?)
@@ -1821,35 +2004,61 @@ buttonsLvl2:
   ; X, Y, type (1=pause, 2=rewind, 3=exit?)
   .db $04, $01, $01
 
-initialScreenPointers:
-  .dw logoScreen
-  .dw titleScreen
-  .dw intro1
+buttonsLvl3:
+  ; X, Y, type (1=pause, 2=rewind, 3=exit?)
+  .db $05, $01, $02
 
-introTextPointers:
-  .dw intro1
+buttonsLvl4:
+  ; X, Y, type (1=pause, 2=rewind, 3=exit?)
+  .db $05, $02, $01
+
+buttonsLvl5:
+  ; X, Y, type (1=pause, 2=rewind, 3=exit?)
+  .db $03, $03, $01
+
+buttonsLvl6:
+  ; X, Y, type (1=pause, 2=rewind, 3=exit?)
+  .db $03, $03, $01
+
+initialScreenPointers:
+  ; .dw logoScreen
+  ; .dw titleScreen
+  ; .dw intro1
+  .dw titleScreen
+  .dw titleScreen
+  .dw titleScreen
+
+; introTextPointers:
+;   .dw intro1
 
 bgLevelsPointers:
   .dw bglvl01
   .dw bglvl02
   .dw bglvl03
-
-spritesPointers:
-  .dw spritesLvl1
-  .dw spritesLvl2
-  .dw spritesLvl3
+  .dw bglvl04
+  .dw bglvl05
+  .dw bglvl06
 
 blocksPointers:
   .dw blocksLvl1
   .dw blocksLvl2
   .dw blocksLvl3
+  .dw blocksLvl4
+  .dw blocksLvl5
+  .dw blocksLvl6
 
 brPointers:
   .dw bladeRewindersLvl1
   .dw bladeRewindersLvl2
   .dw bladeRewindersLvl3
+  .dw bladeRewindersLvl4
+  .dw bladeRewindersLvl5
+  .dw bladeRewindersLvl6
 
 playerInitialPositions:
+  .dw initialPlayerPosLvl1
+  .dw initialPlayerPosLvl1
+  .dw initialPlayerPosLvl1
   .dw initialPlayerPosLvl1
   .dw initialPlayerPosLvl1
   .dw initialPlayerPosLvl1
@@ -1857,11 +2066,18 @@ playerInitialPositions:
 exitsPositions:
   .dw exitsPosLvl1
   .dw exitsPosLvl2
-  .dw exitsPosLvl1
+  .dw exitsPosLvl3
+  .dw exitsPosLvl4
+  .dw exitsPosLvl5
+  .dw exitsPosLvl6
 
 buttonsPositions:
   .dw buttonsLvl1
   .dw buttonsLvl2
+  .dw buttonsLvl3
+  .dw buttonsLvl4
+  .dw buttonsLvl5
+  .dw buttonsLvl6
 
 ;;;;;
 ;TEXTS
