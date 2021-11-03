@@ -212,7 +212,7 @@ LoadPalettesLoop:
   BNE LoadPalettesLoop  ; Branch to LoadPalettesLoop if compare was Not Equal to zero
                         ; if compare was equal to 32, keep going down
 
-  LDA #$04 ;lvl number - 1
+  LDA #$00 ;lvl number - 1
   STA levelNumber
   LDA #$00
   STA letterCursor
@@ -223,12 +223,12 @@ LoadPalettesLoop:
   STA ppuCursorLow
 
   ;deactive intial screens
-  JSR LoadLevel
+  ; JSR LoadLevel
   
   ; LOADING TITLE SCREEN
-  ; LDA #$00
-  ; STA initialBGNumber
-  ; JSR LoadInitialBackground
+  LDA #$00
+  STA initialBGNumber
+  JSR LoadBlackScreen
   
   ; set screen player position
   LDA #$A3
@@ -255,8 +255,8 @@ LoadPalettesLoop:
 
 
 ;;:Set starting game state
-  ;LDA #STATELOGO
-  LDA #STATEPLAYING
+  LDA #STATELOGO
+  ; LDA #STATEPLAYING
   STA gamestate
 
 
@@ -365,7 +365,7 @@ ReadStartBtn:
   ; turn PPU off
   LDA #$00
   STA $2001
-  JSR LoadInitialBackground
+  JSR LoadBlackScreen
   LDA #STATEINTRO
   STA gamestate
 ReadStartBtnDone:
@@ -782,8 +782,6 @@ BlockLoop:
   STA canMove ; player wont move
   RTS
 BlockLoopContinue:
-  INY
-  INY
   INY
   CPX blocksAmount
   BNE BlockLoop
@@ -1572,6 +1570,44 @@ InitialInsideLoop:
   BNE InitialOutsideLoop     ; run the outside loop 256 times before continuing down
   RTS
 
+;;;; black screen
+LoadBlackScreen:
+  LDA $2002             ; read PPU status to reset the high/low latch
+  LDA #$20
+  STA $2006             ; write the high byte of $2000 address
+  LDA #$00
+  STA $2006             ; write the low byte of $2000 address
+  
+  LDX #$00            ; start at pointer + 0
+  LDY #$00
+.initialOutsideLoop:
+  
+.initialInsideLoop:
+  LDA #$24  ; copy one background byte from address in pointer plus Y
+  STA $2007           ; this runs 256 * 4 times
+  
+  INY                 ; inside loop counter
+  CPY #$00
+  BNE .initialInsideLoop      ; run the inside loop 256 times before continuing down  
+  INX
+  CPX #$04
+  BNE .initialOutsideLoop     ; run the outside loop 256 times before continuing down
+  
+  ;; write attributes, in this case black and white (3rd palette)
+  LDA $2002             ; read PPU status to reset the high/low latch
+  LDA #$23
+  STA $2006             ; write the high byte of $23C0 address
+  LDA #$C0
+  STA $2006             ; write the low byte of $23C0 address
+  LDX #$00              ; start out at 0
+.loadAttributeLoop:
+  LDA #%11111111     ; load data from address (attribute + the value in x)
+  STA $2007             ; write to PPU
+  INX                   ; X = X + 1
+  CPX #$40              ; Compare X to hex $08, decimal 8 - copying 8 bytes
+  BNE .loadAttributeLoop
+  RTS
+
 ;;;;;;;;;;;;
 ;;;;;;;;;;;;
 ; Text ENGINE
@@ -1869,82 +1905,73 @@ palette:
 ;   .db $67, $17, $01, $7A
 
 blocksTotalPerLvl: ;no need to multiply, I'm jumping over extra values
-  .db $05, $0A, $0D, $05, $0A, $05, $05
+  .db $05, $0A, $0D, $05, $08, $05, $05
 
 blocksLvl1:
       ;x   y
-  .db $02, $02, $6C, $83
-  .db $04, $02, $8C, $73
-  .db $04, $04, $8C, $73
-  .db $04, $06, $6C, $83
-  .db $02, $05, $8C, $73
+  .db $02, $02
+  .db $04, $02
+  .db $04, $04
+  .db $04, $06
+  .db $02, $05
 
 blocksLvl2:
-  .db $03, $03, $6C, $83  
-  .db $02, $02, $6C, $83
+  .db $03, $03  
+  .db $02, $02
   ; .db $03, $02, $6C, $83
-  .db $04, $06, $6C, $83
-  .db $05, $01, $8C, $73
-  .db $05, $02, $6C, $83
-  .db $05, $03, $8C, $73
-  .db $05, $04, $8C, $73
-  .db $05, $05, $6C, $83
-  .db $05, $06, $8C, $73
-  .db $05, $07, $6C, $83
+  .db $04, $06
+  .db $05, $01
+  .db $05, $02
+  .db $05, $03
+  .db $05, $04
+  .db $05, $05
+  .db $05, $06
+  .db $05, $07
 
 blocksLvl3:
-  .db $07, $01, $00, $00
-  .db $07, $02, $00, $00
+  .db $07, $01
+  .db $07, $02
   ;.db $06, $03, $00, $00
-  .db $06, $04, $00, $00
-  .db $06, $05, $00, $00
-  .db $06, $06, $00, $00
-  .db $06, $07, $00, $00
-  .db $02, $02, $00, $00
-  .db $04, $02, $00, $00
-  .db $02, $04, $00, $00
-  .db $04, $04, $00, $00
+  .db $06, $04
+  .db $06, $05
+  .db $06, $06
+  .db $06, $07
+  .db $02, $02
+  .db $04, $02
+  .db $02, $04
+  .db $04, $04
   ;.db $05, $04, $00, $00
-  .db $04, $06, $00, $00
-  .db $05, $06, $00, $00
-  .db $02, $06, $00, $00
-  .db $01, $07, $00, $00
+  .db $04, $06
+  .db $05, $06
+  .db $02, $06
+  .db $01, $07
 
 blocksLvl4:
       ;x   y
-  .db $05, $02, $6C, $83
-  .db $02, $05, $8C, $73
-  .db $03, $06, $8C, $73
-  .db $04, $04, $6C, $83
-  .db $05, $05, $8C, $73
+  .db $05, $02
+  .db $02, $05
+  .db $03, $06
+  .db $04, $04
+  .db $05, $05
 
 blocksLvl5:
       ;x   y
-  .db $03, $05, $6C, $83
-  .db $03, $02, $8C, $73
-  .db $04, $02, $6C, $83
-  .db $04, $03, $6C, $83
-  .db $01, $03, $8C, $73
-  .db $01, $04, $8C, $73
-  .db $01, $05, $8C, $73
-  .db $05, $05, $8C, $73
-  .db $05, $07, $8C, $73
-  .db $06, $07, $8C, $73
+  .db $03, $05
+  .db $03, $02
+  .db $04, $02
+  .db $04, $03
+  .db $01, $05
+  .db $05, $05
+  .db $05, $07
+  .db $06, $07
 
 blocksLvl6:
       ;x   y
-  .db $03, $05, $6C, $83
-  .db $03, $01, $6C, $83
-  .db $03, $02, $8C, $73
-  .db $04, $01, $8C, $73
-  .db $04, $02, $6C, $83
-  .db $01, $03, $8C, $73
-  .db $01, $04, $8C, $73
-  .db $01, $05, $8C, $73
-  .db $05, $04, $8C, $73
-  .db $05, $05, $8C, $73
-  .db $05, $07, $8C, $73
-  .db $06, $07, $8C, $73
+  .db $05, $02
+  .db $02, $05
+  .db $03, $06
+  .db $04, $04
+  .db $05, $05
 
 bladeRewindersTotalPerLvl:
   .db $01, $01, $01, $01, $01, $01
