@@ -133,7 +133,7 @@ PAUSEDBTN      = $01
 REWINDBTN      = $02
 
 ; text
-TEXTSIZE       = $AA
+TEXTSIZE       = $8A
 
 ;;;;;;;;;;;;;;;;;;
 
@@ -219,7 +219,7 @@ LoadPalettesLoop:
 
   LDA #$20
   STA ppuCursorHigh
-  LDA #$41
+  LDA #$40
   STA ppuCursorLow
 
   ;deactive intial screens
@@ -312,8 +312,10 @@ GameEngine:
   
   LDA gamestate
   CMP #STATEPLAYING
-  BEQ EnginePlaying   ;;game is playing
+  BNE .gameEngineContinue   ;;game is playing
+  JMP EnginePlaying
 
+.gameEngineContinue
   LDA gamestate
   CMP #STATEINTRO
   BEQ EngineIntro
@@ -387,10 +389,25 @@ EngineIntro:
   CLC
   ADC #$01
   STA writerWait
+  LDA writerWait
+  CMP #$05
+  BNE ReadIntroStartBtnDone
+  LDY letterCursor
+  LDA #LOW(firstText)
+  STA pointerLo
+  LDA #HIGH(firstText)
+  STA pointerHi
+  LDA [pointerLo], Y
+  CMP #$24
+  BEQ ReadIntroStartBtnDone
+  LDA #$02
+  JSR sound_load
   LDA letterCursor
   CMP #TEXTSIZE
   BNE ReadIntroStartBtnDone
 ReadIntroStartBtn:
+  LDA #$00 
+  JSR sound_load
   LDA buttons1
   AND #%00010000
   BEQ ReadIntroStartBtnDone ;btn not pressed
@@ -749,6 +766,12 @@ BufferToPPU:
   ; if 'break' add 1 to high ppu?
   ; write to PPu
   ; add 1 to ppu cursor and 1 to letter buffer
+  ; LDA [pointerLo], Y
+  ; CMP #$24
+  ; BEQ .writeContinue
+  ; LDA #$02
+  ; JSR sound_load
+.writeContinue
   LDA letterCursor
   ADC #$01
   STA letterCursor
@@ -2122,14 +2145,14 @@ buttonsPositions:
 ;TEXTS
 ;;;;;
 
-firstText2:
-  .db $0B, $15, $0A, $0D, $0E, $24, $1B, $0E, $20, $12, $17, $0D, $0E, $1B, $1C, $24, $16, $0E, $1C, $1C, $0A, $10, $0E, $24, $0B, $1E, $12, $15, $0D, $0E, $1B, $24, $0F, $12, $1B, $1C, $1D, $24, $1D, $0E, $1C, $1D
-
 firstText:
-  .db $0E, $17, $24, $15, $0A, $24, $0D, $0E, $0C, $0A, $0D, $0A, $24, $0D, $0E, $24, $15, $18, $1C, $24, $09, $00, $24, $0E, $15, $24, $1F, $11, $1C, $24, $24, $24, $0E, $1B, $0A, $24, $1C, $12, $17, $18, $17, $12
-  .db $16, $18, $24, $0D, $0E, $24, $0E, $17, $1D, $1B, $0E, $1D, $0E, $17, $12, $16, $12, $0E, $17, $1D, $24, $24, $18, $24, $0D, $0E, $0B, $12, $0D, $18, $24, $0A, $24, $15, $0A, $24, $12, $16, $19, $0A, $1B, $0A
-  .db $0B, $15, $0E, $24, $0D, $0E, $16, $0A, $17, $0D, $24, $24, $0A, $24, $17, $12, $17, $10, $1E, $17, $24, $1F, $12, $0D, $0E, $18, $0C, $15, $1E, $0B, $24, $1D, $0E, $17, $12, $0A, $24, $1D, $12, $0E, $16, $19
-  .db $24, $24, $18, $24, $1C, $1E, $0F, $12, $0C, $12, $0E, $17, $1D, $0E, $24, $0D, $0E, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $1B, $24, $1C, $1E, $1C, $24, $24, $24, $19, $0E, $15, $12, $0C, $1E, $15, $0A, $1C
+  .db $24, $12, $17, $24, $1D, $11, $0E, $24, $09, $00, $1C, $24, $16, $18, $1F, $12, $0E, $1C, $24, $20, $0E, $1B, $0E, $24, $1D, $11, $0E, $24, $24, $24, $24, $24, $24, $0E, $17, $1D, $0E, $1B, $1D, $0A, $12, $17
+  .db $16, $0E, $17, $1D, $24, $0F, $12, $1B, $1C, $1D, $24, $0C, $11, $18, $12, $0C, $0E, $2F, $24, $24, $24, $24, $24, $16, $18, $1F, $12, $0E, $1C, $24, $20, $0E, $1B, $0E, $24, $1C, $1D, $18, $1B, $0E, $0D, $24
+  .db $18, $17, $24, $0A, $24, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $1F, $18, $15, $1E, $1D, $12, $18, $17, $0A, $1B, $22, $24, $1D, $0E, $0C, $11, $17, $18, $15, $18, $10, $22, $24, $0C, $0A, $15, $15
+  .db $0E, $0D, $24, $1D, $11, $0E, $24, $1F, $11, $1C, $2F
+
+
+
 
 
   .org $FFFA     ;first of the three vectors starts here
