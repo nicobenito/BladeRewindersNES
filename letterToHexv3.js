@@ -41,7 +41,7 @@ const letters = {
 
 // const message = "blade rewinders message builder first test";
 // const message = `en la decada de los 90 el vhs era sinonimo de entretenimiento debido a la imparable demanda ningun videoclub tenia tiempo suficiente de rebobinar sus peliculas`;
-const message = `in the 90s movies were the entertainment first choice. movies were stored on a revolutionary technology called the vhs.`;
+const message = `in the 90s movies were the entertainment first choice. movies were stored on a revolutionary technology called the vhs. el aumento de demanda genero una necesidad imprevista. no era posible rebobinar las peliculas a tiempo. fue entonces cuando el comite de video stores determino la ley del pre rebobinado. cada cliente tenia que devolver las peliculas rebobinadas`;
 
 const stringToHex = () => {
     /*
@@ -98,9 +98,9 @@ const stringToHex = () => {
         }
     });
 
-    lineArray.forEach(element => {
-        resultArray.push(element);
-    });
+    // lineArray.forEach(element => {
+    //     resultArray.push(element);
+    // });
 
     let resultMessage = "";
     resultArray.forEach(element => {

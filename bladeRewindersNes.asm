@@ -102,6 +102,7 @@ letterCursor .rs 1
 ppuCursorLow .rs 1
 ppuCursorHigh .rs 1
 writerWait .rs 1
+writerIsActive .rs 1
 ; sound
 sound_ptr .rs 2
 jmp_ptr .rs 2           ;a pointer variable for indirect jumps
@@ -133,7 +134,7 @@ PAUSEDBTN      = $01
 REWINDBTN      = $02
 
 ; text
-TEXTSIZE       = $8A
+TEXTSIZE       = $01AD
 
 ;;;;;;;;;;;;;;;;;;
 
@@ -191,6 +192,9 @@ vblankwait2:      ; Second wait for vblank, PPU is ready after this
   
   lda #$01
   sta current_song
+
+  ; LDA #$00
+  ; STA writerIsActive
 
 
 LoadPalettes:
@@ -370,6 +374,8 @@ ReadStartBtn:
   JSR LoadBlackScreen
   LDA #STATEINTRO
   STA gamestate
+  ; LDA #$01 ; set writer for next screen
+  ; STA writerIsActive
 ReadStartBtnDone:
   JMP GameEngineDone
 ;;;;;;;;; 
@@ -418,6 +424,8 @@ ReadIntroStartBtn:
   JSR LoadLevel
   LDA #STATEPLAYING
   STA gamestate
+  ; LDA #$00
+  ; STA writerIsActive
 ReadIntroStartBtnDone:
   JMP GameEngineDone
 
@@ -736,9 +744,11 @@ BufferToPPU:
   ; set high and low byte
   ; loop comparing against count and filling ppu
 
-  LDA gamestate
-  CMP #STATEINTRO
-  BNE BufferDone
+  ; LDA gamestate
+  ; CMP #STATEINTRO
+  ; LDA writerIsActive
+  ; CMP #$01
+  ; BNE BufferDone
   LDA writerWait
   CMP #$05
   BNE BufferDone
@@ -1776,6 +1786,13 @@ spritesPointers:
   .bank 1
   .org $E000
 
+;;;;;;;;;;;;;;;;;;; NEW CODE ;;;;;;;;;;;;;;;;;;;;
+
+
+
+;;;;;;;;;;;; screens and pointers below ;;;;;;;;;;;;;;;;;;
+
+
 ; logoScreen:
 ;   incbin "logoscreen1.nam"
 
@@ -2099,7 +2116,7 @@ bgLevelsPointers:
   .dw bglvl03
   .dw bglvl04
   .dw bglvl05
-  .dw bglvl06
+  ;.dw bglvl06
 
 blocksPointers:
   .dw blocksLvl1
@@ -2146,10 +2163,22 @@ buttonsPositions:
 ;;;;;
 
 firstText:
+  ; .db $24, $12, $17, $24, $1D, $11, $0E, $24, $09, $00, $1C, $24, $16, $18, $1F, $12, $0E, $1C, $24, $20, $0E, $1B, $0E, $24, $1D, $11, $0E, $24, $24, $24, $24, $24, $24, $0E, $17, $1D, $0E, $1B, $1D, $0A, $12, $17
+  ; .db $16, $0E, $17, $1D, $24, $0F, $12, $1B, $1C, $1D, $24, $0C, $11, $18, $12, $0C, $0E, $2F, $24, $24, $24, $24, $24, $16, $18, $1F, $12, $0E, $1C, $24, $20, $0E, $1B, $0E, $24, $1C, $1D, $18, $1B, $0E, $0D, $24
+  ; .db $18, $17, $24, $0A, $24, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $1F, $18, $15, $1E, $1D, $12, $18, $17, $0A, $1B, $22, $24, $1D, $0E, $0C, $11, $17, $18, $15, $18, $10, $22, $24, $0C, $0A, $15, $15
+  ; .db $0E, $0D, $24, $1D, $11, $0E, $24, $1F, $11, $1C, $2F
   .db $24, $12, $17, $24, $1D, $11, $0E, $24, $09, $00, $1C, $24, $16, $18, $1F, $12, $0E, $1C, $24, $20, $0E, $1B, $0E, $24, $1D, $11, $0E, $24, $24, $24, $24, $24, $24, $0E, $17, $1D, $0E, $1B, $1D, $0A, $12, $17
   .db $16, $0E, $17, $1D, $24, $0F, $12, $1B, $1C, $1D, $24, $0C, $11, $18, $12, $0C, $0E, $2F, $24, $24, $24, $24, $24, $16, $18, $1F, $12, $0E, $1C, $24, $20, $0E, $1B, $0E, $24, $1C, $1D, $18, $1B, $0E, $0D, $24
   .db $18, $17, $24, $0A, $24, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $1F, $18, $15, $1E, $1D, $12, $18, $17, $0A, $1B, $22, $24, $1D, $0E, $0C, $11, $17, $18, $15, $18, $10, $22, $24, $0C, $0A, $15, $15
-  .db $0E, $0D, $24, $1D, $11, $0E, $24, $1F, $11, $1C, $2F
+  .db $0E, $0D, $24, $1D, $11, $0E, $24, $1F, $11, $1C, $2F, $24, $0E, $15, $24, $0A, $1E, $16, $0E, $17, $1D, $18, $24, $0D, $0E, $24, $0D, $0E, $16, $0A, $17, $0D, $0A, $24, $24, $10, $0E, $17, $0E, $1B, $18, $24
+  .db $1E, $17, $0A, $24, $17, $0E, $0C, $0E, $1C, $12, $0D, $0A, $0D, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $12, $16, $19, $1B, $0E, $1F, $12, $1C, $1D, $0A, $2F, $24, $17, $18, $24, $0E, $1B
+  .db $0A, $24, $19, $18, $1C, $12, $0B, $15, $0E, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $1B, $24, $15, $0A, $1C, $24, $19, $0E, $15, $12, $0C, $1E, $15, $0A, $1C, $24, $0A, $24, $24
+  .db $24, $24, $24, $24, $24, $1D, $12, $0E, $16, $19, $18, $2F, $24, $0F, $1E, $0E, $24, $0E, $17, $1D, $18, $17, $0C, $0E, $1C, $24, $0C, $1E, $0A, $17, $0D, $18, $24, $0E, $15, $24, $24, $0C, $18, $16, $12, $1D
+  .db $0E, $24, $0D, $0E, $24, $1F, $12, $0D, $0E, $18, $24, $1C, $1D, $18, $1B, $0E, $1C, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $0D, $0E, $1D, $0E, $1B, $16, $12, $17, $18, $24, $15, $0A, $24, $15, $0E
+  .db $22, $24, $0D, $0E, $15, $24, $19, $1B, $0E, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $0D, $18, $2F, $24, $0C, $0A, $0D, $0A, $24, $0C, $15, $12, $0E, $17, $1D, $0E, $24
+  .db $1D, $0E, $17, $12, $0A, $24, $24, $1A, $1E, $0E, $24, $0D, $0E, $1F, $18, $15, $1F, $0E, $1B, $24, $15, $0A, $1C, $24, $19, $0E, $15, $12, $0C, $1E, $15, $0A, $1C, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B
+  .db $18, $0B, $12, $17, $0A, $0D, $0A, $1C
+
 
 
 
