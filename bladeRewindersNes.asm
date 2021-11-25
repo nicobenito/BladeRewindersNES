@@ -99,10 +99,14 @@ charSpriteY .rs 2
 ;ppu buffer
 ;simple buffer text
 letterCursor .rs 1
+pageCursor .rs 1
+currentTextSize .rs 1
+currentPage .rs 1
 ppuCursorLow .rs 1
 ppuCursorHigh .rs 1
 writerWait .rs 1
 writerIsActive .rs 1
+currentText .rs 2
 ; sound
 sound_ptr .rs 2
 jmp_ptr .rs 2           ;a pointer variable for indirect jumps
@@ -134,7 +138,9 @@ PAUSEDBTN      = $01
 REWINDBTN      = $02
 
 ; text
-TEXTSIZE       = $01AD
+TEXTSIZE_LOW   = $F0
+TEXTSIZE_PAGES  = $02
+TEXT_SPEED = $04
 
 ;;;;;;;;;;;;;;;;;;
 
@@ -220,6 +226,7 @@ LoadPalettesLoop:
   STA levelNumber
   LDA #$00
   STA letterCursor
+  STA pageCursor
 
   LDA #$20
   STA ppuCursorHigh
@@ -374,6 +381,14 @@ ReadStartBtn:
   JSR LoadBlackScreen
   LDA #STATEINTRO
   STA gamestate
+  LDA #TEXTSIZE_LOW
+  STA currentTextSize
+  LDA #TEXTSIZE_PAGES
+  STA currentPage
+  LDA #LOW(firstText)
+  STA currentText+0
+  LDA #HIGH(firstText)
+  STA currentText+1
   ; LDA #$01 ; set writer for next screen
   ; STA writerIsActive
 ReadStartBtnDone:
@@ -396,12 +411,12 @@ EngineIntro:
   ADC #$01
   STA writerWait
   LDA writerWait
-  CMP #$05
+  CMP #TEXT_SPEED
   BNE ReadIntroStartBtnDone
   LDY letterCursor
-  LDA #LOW(firstText)
+  LDA currentText+0
   STA pointerLo
-  LDA #HIGH(firstText)
+  LDA currentText+1
   STA pointerHi
   LDA [pointerLo], Y
   CMP #$24
@@ -409,7 +424,7 @@ EngineIntro:
   LDA #$02
   JSR sound_load
   LDA letterCursor
-  CMP #TEXTSIZE
+  CMP currentTextSize
   BNE ReadIntroStartBtnDone
 ReadIntroStartBtn:
   LDA #$00 
@@ -732,70 +747,85 @@ UpdateCharactersSprites:
   STA [charSpriteY], Y
   RTS
 
-DrawScore:
-  ;;draw score on screen using background tiles
-  ;;or using many sprites
-  RTS
+; DrawScore:
+;   ;;draw score on screen using background tiles
+;   ;;or using many sprites
+;   RTS
 
-BufferToPPU:
-  ; reads buffer
-  ; if zero, done
-  ; set count with length value
-  ; set high and low byte
-  ; loop comparing against count and filling ppu
+; BufferToPPU:
+;   ; reads buffer
+;   ; if zero, done
+;   ; set count with length value
+;   ; set high and low byte
+;   ; loop comparing against count and filling ppu
 
-  ; LDA gamestate
-  ; CMP #STATEINTRO
-  ; LDA writerIsActive
-  ; CMP #$01
-  ; BNE BufferDone
-  LDA writerWait
-  CMP #$05
-  BNE BufferDone
-  LDA #$00
-  STA writerWait
-  ; read ppu cursor
-  LDA letterCursor
-  CMP #TEXTSIZE
-  BEQ BufferDone
-  ; set ppu address
-  LDA $2002             ; read PPU status to reset the high/low latch
-  LDA ppuCursorHigh
-  STA $2006             ; write the high byte of $2000 address
-  LDA ppuCursorLow
-  STA $2006             ; write the low byte of $2000 address
-  ; read letter buffer with letter cursor
-  LDY letterCursor
-  LDA #LOW(firstText)
-  STA pointerLo
-  LDA #HIGH(firstText)
-  STA pointerHi
-  LDA [pointerLo], Y
-  STA $2007
-  ; if 'space' add 1 to cursor
-  ; if 'break' add 1 to high ppu?
-  ; write to PPu
-  ; add 1 to ppu cursor and 1 to letter buffer
-  ; LDA [pointerLo], Y
-  ; CMP #$24
-  ; BEQ .writeContinue
-  ; LDA #$02
-  ; JSR sound_load
-.writeContinue
-  LDA letterCursor
-  ADC #$01
-  STA letterCursor
-  LDA ppuCursorLow
-  ADC #$01
-  STA ppuCursorLow
-  CMP #$00
-  BNE BufferDone
-  LDA ppuCursorHigh
-  CLC
-  ADC #$01
-  STA ppuCursorHigh
-BufferDone:
-  RTS
+;   ; LDA gamestate
+;   ; CMP #STATEINTRO
+;   ; LDA writerIsActive
+;   ; CMP #$01
+;   ; BNE BufferDone
+;   LDA writerWait
+;   CMP #TEXT_SPEED
+;   BNE BufferDone
+;   LDA #$00
+;   STA writerWait
+;   ; read page cursor, si es menos q 1, no hay q comparar el lettercursor aun, solo seguir aumentandolo
+;   LDA pageCursor
+;   CMP currentPage
+;   BNE .insertLetter
+;   ; read ppu cursor
+;   LDA letterCursor
+;   CMP currentTextSize
+;   BEQ BufferDone
+; .insertLetter
+;   ; set ppu address
+;   LDA $2002             ; read PPU status to reset the high/low latch
+;   LDA ppuCursorHigh
+;   STA $2006             ; write the high byte of $2000 address
+;   LDA ppuCursorLow
+;   STA $2006             ; write the low byte of $2000 address
+;   ; read letter buffer with letter cursor
+;   LDY letterCursor
+;   LDA #LOW(firstText)
+;   STA pointerLo
+;   LDA #HIGH(firstText)
+;   CLC
+;   ADC pageCursor
+;   STA pointerHi
+;   LDA [pointerLo], Y
+;   STA $2007
+;   ; if 'space' add 1 to cursor
+;   ; if 'break' add 1 to high ppu?
+;   ; write to PPu
+;   ; add 1 to ppu cursor and 1 to letter buffer
+;   ; LDA [pointerLo], Y
+;   ; CMP #$24
+;   ; BEQ .writeContinue
+;   ; LDA #$02
+;   ; JSR sound_load
+; .writeContinue
+;   LDA letterCursor
+;   ADC #$01
+;   STA letterCursor
+;   CMP #$00
+;   BNE .handlePPUAddress
+;   LDA pageCursor
+;   CLC
+;   ADC #$01
+;   STA pageCursor
+; .handlePPUAddress
+;   LDA ppuCursorLow
+;   CLC
+;   ADC #$01
+;   STA ppuCursorLow
+;   CMP #$00
+;   BNE BufferDone
+;   LDA ppuCursorHigh
+;   CLC
+;   ADC #$01
+;   STA ppuCursorHigh
+; BufferDone:
+;   RTS
 
 CheckNextPosition:
   LDA #$01
@@ -1779,6 +1809,22 @@ spritesPointers:
   .dw spritesLvl2
   .dw spritesLvl2
   .dw spritesLvl2
+;;;;;;;;;;;;;;; TEXTS ;;;;;;;;;;;;;;;;;;
+firstText:
+  .db $24, $12, $17, $24, $1D, $11, $0E, $24, $09, $00, $1C, $24, $16, $18, $1F, $12, $0E, $1C, $24, $20, $0E, $1B, $0E, $24, $1D, $11, $0E, $24, $24, $24, $24, $24, $24, $0E, $17, $1D, $0E, $1B, $1D, $0A, $12, $17, $16, $0E, $17, $1D, $24, $0F, $12, $1B, $1C, $1D, $24, $0C, $11, $18, $12, $0C, $0E, $2F, $24, $24
+  .db $24, $24, $24, $16, $18, $1F, $12, $0E, $1C, $24, $20, $0E, $1B, $0E, $24, $1C, $1D, $18, $1B, $0E, $0D, $24, $18, $17, $24, $0A, $24, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $1F, $18, $15, $1E, $1D, $12, $18, $17, $0A, $1B, $22, $24, $1D, $0E, $0C, $11, $17, $18, $15, $18, $10, $22, $24, $0C, $0A 
+  .db $15, $15, $0E, $0D, $24, $1D, $11, $0E, $24, $1F, $11, $1C, $2F, $24, $0E, $15, $24, $0A, $1E, $16, $0E, $17, $1D, $18, $24, $0D, $0E, $24, $0D, $0E, $16, $0A, $17, $0D, $0A, $24, $24, $10, $0E, $17, $0E, $1B, $18, $24, $1E, $17, $0A, $24, $17, $0E, $0C, $0E, $1C, $12, $0D, $0A, $0D, $24, $24, $24, $24, $24 
+  .db $24, $24, $24, $24, $24, $24, $24, $12, $16, $19, $1B, $0E, $1F, $12, $1C, $1D, $0A, $2F, $24, $17, $18, $24, $0E, $1B, $0A, $24, $19, $18, $1C, $12, $0B, $15, $0E, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $1B, $24, $15, $0A, $1C, $24, $19, $0E, $15, $12, $0C, $1E, $15, $0A, $1C 
+  .db $24, $0A, $24, $24, $24, $24, $24, $24, $24, $1D, $12, $0E, $16, $19, $18, $2F, $24, $0F, $1E, $0E, $24, $0E, $17, $1D, $18, $17, $0C, $0E, $1C, $24, $0C, $1E, $0A, $17, $0D, $18, $24, $0E, $15, $24, $24, $0C, $18, $16, $12, $1D, $0E, $24, $0D, $0E, $24, $1F, $12, $0D, $0E, $18, $24, $1C, $1D, $18, $1B, $0E, $1C
+  .db $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $0D, $0E, $1D, $0E, $1B, $16, $12, $17, $18, $24, $15, $0A, $24, $15, $0E, $22, $24, $0D, $0E, $15, $24, $19, $1B, $0E, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $0D, $18, $2F, $24, $0C, $0A, $0D, $0A, $24, $0C, $15, $12, $0E
+  .db $17, $1D, $0E, $24, $1D, $0E, $17, $12, $0A, $24, $24, $1A, $1E, $0E, $24, $0D, $0E, $1F, $18, $15, $1F, $0E, $1B, $24, $15, $0A, $1C, $24, $19, $0E, $15, $12, $0C, $1E, $15, $0A, $1C, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $0D, $0A, $1C, $2F, $24, $01, $02, $03, $0F, $1E, $0E, $24
+  .db $0E, $17, $1D, $18, $17, $0C, $0E, $1C, $24, $24, $24, $24, $0C, $1E, $0A, $17, $0D, $18, $24, $0E, $15, $24, $0C, $18, $16, $12, $1D, $0E, $24, $0D, $0E, $24, $1F, $12, $0D, $0E, $18, $24, $24, $24, $24, $24, $24, $24, $1C, $1D, $18, $1B, $0E, $1C, $24, $0D, $0E, $1D, $0E, $1B, $16, $12, $17, $18, $24, $15, $0A
+  .db $24, $15, $0E, $22, $24, $0D, $0E, $15, $24, $19, $1B, $0E, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $0D, $18, $2F, $24, $0C, $0A, $0D, $0A, $24, $0C, $15, $12, $0E, $17, $1D, $0E, $24, $1D, $0E, $17, $12, $0A, $24, $24, $1A, $1E, $0E, $24, $0D, $0E, $1F, $18, $15, $1F, $0E, $1B, $24, $15, $0A, $1C, $24, $19
+  .db $0E, $15, $12, $0C, $1E, $15, $0A, $1C, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $0D, $0A, $1C, $2F, $24, $03, $02, $01, $0F, $1E, $0E, $24, $0E, $17, $1D, $18, $17, $0C, $0E, $1C, $24, $24, $24, $24, $0C, $1E, $0A, $17, $0D, $18, $24, $0E, $15, $24, $0C, $18, $16, $12, $1D, $0E, $24
+  .db $0D, $0E, $24, $1F, $12, $0D, $0E, $18, $24, $24, $24, $24, $24, $24, $24, $1C, $1D, $18, $1B, $0E, $1C, $24, $0D, $0E, $1D, $0E, $1B, $16, $12, $17, $18, $24, $15, $0A, $24, $15, $0E, $22, $24, $0D, $0E, $15, $24, $19, $1B, $0E, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $0D, $18, $2F, $24, $0C, $0A, $0D, $0A
+  .db $24, $0C, $15, $12, $0E, $17, $1D, $0E, $24, $1D, $0E, $17, $12, $0A, $24, $24, $1A, $1E, $0E, $24, $0D, $0E, $1F, $18, $15, $1F, $0E, $1B, $24, $15, $0A, $1C, $24, $19, $0E, $15, $12, $0C, $1E, $15, $0A, $1C, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $0D, $0A, $1C, $01, $2F, $24
+
+
 
 ;;;;;;;;;;;;;
   
@@ -1787,7 +1833,80 @@ spritesPointers:
   .org $E000
 
 ;;;;;;;;;;;;;;;;;;; NEW CODE ;;;;;;;;;;;;;;;;;;;;
+BufferToPPU:
+  ; reads buffer
+  ; if zero, done
+  ; set count with length value
+  ; set high and low byte
+  ; loop comparing against count and filling ppu
 
+  ; LDA gamestate
+  ; CMP #STATEINTRO
+  ; LDA writerIsActive
+  ; CMP #$01
+  ; BNE BufferDone
+  LDA writerWait
+  CMP #TEXT_SPEED
+  BNE BufferDone
+  LDA #$00
+  STA writerWait
+  ; read page cursor, si es menos q 1, no hay q comparar el lettercursor aun, solo seguir aumentandolo
+  LDA pageCursor
+  CMP currentPage
+  BNE .insertLetter
+  ; read ppu cursor
+  LDA letterCursor
+  CMP currentTextSize
+  BEQ BufferDone
+.insertLetter
+  ; set ppu address
+  LDA $2002             ; read PPU status to reset the high/low latch
+  LDA ppuCursorHigh
+  STA $2006             ; write the high byte of $2000 address
+  LDA ppuCursorLow
+  STA $2006             ; write the low byte of $2000 address
+  ; read letter buffer with letter cursor
+  LDY letterCursor
+  LDA currentText+0
+  STA pointerLo
+  LDA currentText+1
+  CLC
+  ADC pageCursor
+  STA pointerHi
+  LDA [pointerLo], Y
+  STA $2007
+  ; if 'space' add 1 to cursor
+  ; if 'break' add 1 to high ppu?
+  ; write to PPu
+  ; add 1 to ppu cursor and 1 to letter buffer
+  ; LDA [pointerLo], Y
+  ; CMP #$24
+  ; BEQ .writeContinue
+  ; LDA #$02
+  ; JSR sound_load
+.writeContinue
+  LDA letterCursor
+  ADC #$01
+  STA letterCursor
+  CMP #$00
+  BNE .handlePPUAddress
+  LDA pageCursor
+  CLC
+  ADC #$01
+  STA pageCursor
+.handlePPUAddress
+  LDA ppuCursorLow
+  CLC
+  ADC #$01
+  STA ppuCursorLow
+  CMP #$00
+  BNE BufferDone
+  LDA ppuCursorHigh
+  CLC
+  ADC #$01
+  STA ppuCursorHigh
+BufferDone:
+  RTS
 
 
 ;;;;;;;;;;;; screens and pointers below ;;;;;;;;;;;;;;;;;;
@@ -2162,22 +2281,23 @@ buttonsPositions:
 ;TEXTS
 ;;;;;
 
-firstText:
-  ; .db $24, $12, $17, $24, $1D, $11, $0E, $24, $09, $00, $1C, $24, $16, $18, $1F, $12, $0E, $1C, $24, $20, $0E, $1B, $0E, $24, $1D, $11, $0E, $24, $24, $24, $24, $24, $24, $0E, $17, $1D, $0E, $1B, $1D, $0A, $12, $17
-  ; .db $16, $0E, $17, $1D, $24, $0F, $12, $1B, $1C, $1D, $24, $0C, $11, $18, $12, $0C, $0E, $2F, $24, $24, $24, $24, $24, $16, $18, $1F, $12, $0E, $1C, $24, $20, $0E, $1B, $0E, $24, $1C, $1D, $18, $1B, $0E, $0D, $24
-  ; .db $18, $17, $24, $0A, $24, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $1F, $18, $15, $1E, $1D, $12, $18, $17, $0A, $1B, $22, $24, $1D, $0E, $0C, $11, $17, $18, $15, $18, $10, $22, $24, $0C, $0A, $15, $15
-  ; .db $0E, $0D, $24, $1D, $11, $0E, $24, $1F, $11, $1C, $2F
-  .db $24, $12, $17, $24, $1D, $11, $0E, $24, $09, $00, $1C, $24, $16, $18, $1F, $12, $0E, $1C, $24, $20, $0E, $1B, $0E, $24, $1D, $11, $0E, $24, $24, $24, $24, $24, $24, $0E, $17, $1D, $0E, $1B, $1D, $0A, $12, $17
-  .db $16, $0E, $17, $1D, $24, $0F, $12, $1B, $1C, $1D, $24, $0C, $11, $18, $12, $0C, $0E, $2F, $24, $24, $24, $24, $24, $16, $18, $1F, $12, $0E, $1C, $24, $20, $0E, $1B, $0E, $24, $1C, $1D, $18, $1B, $0E, $0D, $24
-  .db $18, $17, $24, $0A, $24, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $1F, $18, $15, $1E, $1D, $12, $18, $17, $0A, $1B, $22, $24, $1D, $0E, $0C, $11, $17, $18, $15, $18, $10, $22, $24, $0C, $0A, $15, $15
-  .db $0E, $0D, $24, $1D, $11, $0E, $24, $1F, $11, $1C, $2F, $24, $0E, $15, $24, $0A, $1E, $16, $0E, $17, $1D, $18, $24, $0D, $0E, $24, $0D, $0E, $16, $0A, $17, $0D, $0A, $24, $24, $10, $0E, $17, $0E, $1B, $18, $24
-  .db $1E, $17, $0A, $24, $17, $0E, $0C, $0E, $1C, $12, $0D, $0A, $0D, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $12, $16, $19, $1B, $0E, $1F, $12, $1C, $1D, $0A, $2F, $24, $17, $18, $24, $0E, $1B
-  .db $0A, $24, $19, $18, $1C, $12, $0B, $15, $0E, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $1B, $24, $15, $0A, $1C, $24, $19, $0E, $15, $12, $0C, $1E, $15, $0A, $1C, $24, $0A, $24, $24
-  .db $24, $24, $24, $24, $24, $1D, $12, $0E, $16, $19, $18, $2F, $24, $0F, $1E, $0E, $24, $0E, $17, $1D, $18, $17, $0C, $0E, $1C, $24, $0C, $1E, $0A, $17, $0D, $18, $24, $0E, $15, $24, $24, $0C, $18, $16, $12, $1D
-  .db $0E, $24, $0D, $0E, $24, $1F, $12, $0D, $0E, $18, $24, $1C, $1D, $18, $1B, $0E, $1C, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $0D, $0E, $1D, $0E, $1B, $16, $12, $17, $18, $24, $15, $0A, $24, $15, $0E
-  .db $22, $24, $0D, $0E, $15, $24, $19, $1B, $0E, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $0D, $18, $2F, $24, $0C, $0A, $0D, $0A, $24, $0C, $15, $12, $0E, $17, $1D, $0E, $24
-  .db $1D, $0E, $17, $12, $0A, $24, $24, $1A, $1E, $0E, $24, $0D, $0E, $1F, $18, $15, $1F, $0E, $1B, $24, $15, $0A, $1C, $24, $19, $0E, $15, $12, $0C, $1E, $15, $0A, $1C, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B
-  .db $18, $0B, $12, $17, $0A, $0D, $0A, $1C
+; firstText:
+;   ; .db $24, $12, $17, $24, $1D, $11, $0E, $24, $09, $00, $1C, $24, $16, $18, $1F, $12, $0E, $1C, $24, $20, $0E, $1B, $0E, $24, $1D, $11, $0E, $24, $24, $24, $24, $24, $24, $0E, $17, $1D, $0E, $1B, $1D, $0A, $12, $17
+;   ; .db $16, $0E, $17, $1D, $24, $0F, $12, $1B, $1C, $1D, $24, $0C, $11, $18, $12, $0C, $0E, $2F, $24, $24, $24, $24, $24, $16, $18, $1F, $12, $0E, $1C, $24, $20, $0E, $1B, $0E, $24, $1C, $1D, $18, $1B, $0E, $0D, $24
+;   ; .db $18, $17, $24, $0A, $24, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $1F, $18, $15, $1E, $1D, $12, $18, $17, $0A, $1B, $22, $24, $1D, $0E, $0C, $11, $17, $18, $15, $18, $10, $22, $24, $0C, $0A, $15, $15
+;   ; .db $0E, $0D, $24, $1D, $11, $0E, $24, $1F, $11, $1C, $2F
+;   .db $24, $12, $17, $24, $1D, $11, $0E, $24, $09, $00, $1C, $24, $16, $18, $1F, $12, $0E, $1C, $24, $20, $0E, $1B, $0E, $24, $1D, $11, $0E, $24, $24, $24, $24, $24, $24, $0E, $17, $1D, $0E, $1B, $1D, $0A, $12, $17, $16, $0E, $17, $1D, $24, $0F, $12, $1B, $1C, $1D, $24, $0C, $11, $18, $12, $0C, $0E, $2F, $24, $24
+;   .db $24, $24, $24, $16, $18, $1F, $12, $0E, $1C, $24, $20, $0E, $1B, $0E, $24, $1C, $1D, $18, $1B, $0E, $0D, $24, $18, $17, $24, $0A, $24, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $1F, $18, $15, $1E, $1D, $12, $18, $17, $0A, $1B, $22, $24, $1D, $0E, $0C, $11, $17, $18, $15, $18, $10, $22, $24, $0C, $0A 
+;   .db $15, $15, $0E, $0D, $24, $1D, $11, $0E, $24, $1F, $11, $1C, $2F, $24, $0E, $15, $24, $0A, $1E, $16, $0E, $17, $1D, $18, $24, $0D, $0E, $24, $0D, $0E, $16, $0A, $17, $0D, $0A, $24, $24, $10, $0E, $17, $0E, $1B, $18, $24, $1E, $17, $0A, $24, $17, $0E, $0C, $0E, $1C, $12, $0D, $0A, $0D, $24, $24, $24, $24, $24 
+;   .db $24, $24, $24, $24, $24, $24, $24, $12, $16, $19, $1B, $0E, $1F, $12, $1C, $1D, $0A, $2F, $24, $17, $18, $24, $0E, $1B, $0A, $24, $19, $18, $1C, $12, $0B, $15, $0E, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $1B, $24, $15, $0A, $1C, $24, $19, $0E, $15, $12, $0C, $1E, $15, $0A, $1C 
+;   .db $24, $0A, $24, $24, $24, $24, $24, $24, $24, $1D, $12, $0E, $16, $19, $18, $2F, $24, $0F, $1E, $0E, $24, $0E, $17, $1D, $18, $17, $0C, $0E, $1C, $24, $0C, $1E, $0A, $17, $0D, $18, $24, $0E, $15, $24, $24, $0C, $18, $16, $12, $1D, $0E, $24, $0D, $0E, $24, $1F, $12, $0D, $0E, $18, $24, $1C, $1D, $18, $1B, $0E, $1C
+;   .db $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $0D, $0E, $1D, $0E, $1B, $16, $12, $17, $18, $24, $15, $0A, $24, $15, $0E, $22, $24, $0D, $0E, $15, $24, $19, $1B, $0E, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $0D, $18, $2F, $24, $0C, $0A, $0D, $0A, $24, $0C, $15, $12, $0E
+;   .db $17, $1D, $0E, $24, $1D, $0E, $17, $12, $0A, $24, $24, $1A, $1E, $0E, $24, $0D, $0E, $1F, $18, $15, $1F, $0E, $1B, $24, $15, $0A, $1C, $24, $19, $0E, $15, $12, $0C, $1E, $15, $0A, $1C, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $0D, $0A, $1C, $2F, $24, $01, $02, $03, $0F, $1E, $0E, $24
+;   .db $0E, $17, $1D, $18, $17, $0C, $0E, $1C, $24, $24, $24, $24, $0C, $1E, $0A, $17, $0D, $18, $24, $0E, $15, $24, $0C, $18, $16, $12, $1D, $0E, $24, $0D, $0E, $24, $1F, $12, $0D, $0E, $18, $24, $24, $24, $24, $24, $24, $24, $1C, $1D, $18, $1B, $0E, $1C, $24, $0D, $0E, $1D, $0E, $1B, $16, $12, $17, $18, $24, $15, $0A
+;   .db $24, $15, $0E, $22, $24, $0D, $0E, $15, $24, $19, $1B, $0E, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $0D, $18, $2F, $24, $0C, $0A, $0D, $0A, $24, $0C, $15, $12, $0E, $17, $1D, $0E, $24, $1D, $0E, $17, $12, $0A, $24, $24, $1A, $1E, $0E, $24, $0D, $0E, $1F, $18, $15, $1F, $0E, $1B, $24, $15, $0A, $1C, $24, $19
+;   .db $0E, $15, $12, $0C, $1E, $15, $0A, $1C, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $0D, $0A, $1C, $2F, $24, $03, $02, $01, $0F, $1E, $0E, $24, $0E, $17, $1D, $18, $17, $0C, $0E, $1C, $24, $24, $24, $24, $0C, $1E, $0A, $17, $0D, $18, $24, $0E, $15, $24, $0C, $18, $16, $12, $1D, $0E, $24
+;   .db $0D, $0E, $24, $1F, $12, $0D, $0E, $18, $24, $24, $24, $24, $24, $24, $24, $1C, $1D, $18, $1B, $0E, $1C, $24, $0D, $0E, $1D, $0E, $1B, $16, $12, $17, $18, $24, $15, $0A, $24, $15, $0E, $22, $24, $0D, $0E, $15, $24, $19, $1B, $0E, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $0D, $18, $2F, $24, $0C, $0A, $0D, $0A
+;   .db $24, $0C, $15, $12, $0E, $17, $1D, $0E, $24, $1D, $0E, $17, $12, $0A, $24, $24, $1A, $1E, $0E, $24, $0D, $0E, $1F, $18, $15, $1F, $0E, $1B, $24, $15, $0A, $1C, $24, $19, $0E, $15, $12, $0C, $1E, $15, $0A, $1C, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $0D, $0A, $1C, $01, $2F, $24
 
 
 
