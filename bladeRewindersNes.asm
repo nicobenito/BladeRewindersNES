@@ -98,7 +98,9 @@ charSpriteX .rs 2
 charSpriteY .rs 2
 ;ppu buffer
 ;simple buffer text
+letterCounter .rs 1
 letterCursor .rs 1
+pageCounter .rs 1
 pageCursor .rs 1
 screenCounter .rs 1
 currentTextSize .rs 1
@@ -109,6 +111,7 @@ writerWait .rs 1
 writerIsActive .rs 1
 currentText .rs 2
 currentScreenAmount .rs 1
+currentTextLimit .rs 2
 ; sound
 sound_ptr .rs 2
 jmp_ptr .rs 2           ;a pointer variable for indirect jumps
@@ -139,16 +142,20 @@ PPU_BUFFER     = $0400
 PAUSEDBTN      = $01
 REWINDBTN      = $02
 
+TEXT_SPEED = $01
 ; text intro
 TEXTSIZE_LOW   = $F0
 TEXTSIZE_PAGES  = $02
-TEXT_SCREENS = $01
-TEXT_SPEED = $01
+TEXT_SCREENS = $02
+TEXT_LIMIT_LOW = $F0
+TEXT_LIMIT_HIGH = $03
 
 ; dialogue one
 DIALOGUE_1_LOW = $A1
 DIALOGUE_1_PAGES  = $00
-DIALOGUE_1_SCREENS = $01
+DIALOGUE_1_SCREENS = $04
+DIALOGUE_1_LIMIT_LOW = $94
+DIALOGUE_1_LIMIT_HIGH = $02
 
 ;;;;;;;;;;;;;;;;;;
 
@@ -242,7 +249,7 @@ LoadPalettesLoop:
   STA ppuCursorLow
 
   ;deactive intial screens
-  ; JSR LoadLevel
+  ;JSR LoadLevel
   
   ; LOADING TITLE SCREEN
   LDA #$00
@@ -275,7 +282,7 @@ LoadPalettesLoop:
 
 ;;:Set starting game state
   LDA #STATELOGO
-  ; LDA #STATEPLAYING
+  ;LDA #STATEPLAYING
   STA gamestate
 
 
@@ -399,6 +406,10 @@ ReadStartBtn:
   STA currentText+1
   LDA #TEXT_SCREENS
   STA currentScreenAmount
+  LDA #TEXT_LIMIT_LOW
+  STA currentTextLimit+0
+  LDA #TEXT_LIMIT_HIGH
+  STA currentTextLimit+1
   ; LDA #$01 ; set writer for next screen
   ; STA writerIsActive
 ReadStartBtnDone:
@@ -433,13 +444,18 @@ EngineIntro:
   STA pointerHi
   LDA [pointerLo], Y
   CMP #$24
-  BEQ ReadIntroStartBtnDone
+  BEQ .checkCounter
   LDA #$02
   JSR sound_load
-  LDA pageCursor
+.checkCounter
+  LDA currentPage
+  CMP #$00
+  BEQ .onlyletterCursor
+  LDA pageCounter
   CMP currentPage
   BNE ReadIntroStartBtnDone
-  LDA letterCursor
+.onlyletterCursor
+  LDA letterCounter
   CMP currentTextSize
   BNE ReadIntroStartBtnDone
 ; continue to next page, set everything
@@ -452,8 +468,8 @@ EngineIntro:
   LDA #$40
   STA ppuCursorLow
   LDA #$00
-  STA letterCursor
-  STA pageCursor
+  STA letterCounter
+  STA pageCounter
   LDA #$00
   STA $2001
   LDA screenCounter ; para evitar q se limpie la pantalla si ya se alcanzo la pagina final.
@@ -1857,10 +1873,38 @@ firstText:
   .db $24, $0C, $15, $12, $0E, $17, $1D, $0E, $24, $1D, $0E, $17, $12, $0A, $24, $24, $1A, $1E, $0E, $24, $0D, $0E, $1F, $18, $15, $1F, $0E, $1B, $24, $15, $0A, $1C, $24, $19, $0E, $15, $12, $0C, $1E, $15, $0A, $1C, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $0D, $0A, $1C, $01, $2F, $24
 
 dialogueOne:
-  .db $24, $11, $0E, $22, $24, $11, $18, $17, $0E, $22, $2F, $24, $12, $24, $20, $0A, $17, $1D, $24, $1D, $18, $24, $1B, $0E, $1D, $1E, $1B, $17, $24, $1D, $11, $0E, $24, $16, $18, $1F, $12, $0E, $24, $20, $0E, $24, $1C, $0A, $20, $24, $22, $0E, $1C, $1D, $0A, $1B, $0D, $0A, $22, $2F, $24, $20, $11, $0A, $1D, $24, $0D, $18
-  .db $24, $22, $18, $1E, $24, $16, $0E, $0A, $17, $24, $22, $18, $1E, $24, $0A, $15, $1B, $0E, $0A, $0D, $22, $24, $1B, $0E, $1D, $1E, $1B, $17, $0E, $0D, $24, $24, $24, $12, $1D, $2F, $24, $0D, $18, $24, $22, $18, $1E, $24, $1B, $0E, $20, $12, $17, $0D, $0E, $0D, $24, $12, $1D, $24, $1B, $12, $10, $11, $1D, $2F, $24, $24
-  .db $24, $18, $11, $24, $10, $18, $0D, $24, $12, $24, $0C, $0A, $17, $24, $17, $18, $1D, $24, $0B, $0E, $15, $12, $0E, $1F, $0E, $0D, $24, $1D, $11, $12, $1C, $2F
-
+  ; .db $24, $11, $0E, $22, $24, $11, $18, $17, $0E, $22, $2F, $24, $12, $24, $20, $0A, $17, $1D, $24, $1D, $18, $24, $1B, $0E, $1D, $1E, $1B, $17, $24, $1D, $11, $0E, $24, $16, $18, $1F, $12, $0E, $24, $20, $0E, $24, $1C, $0A, $20, $24, $22, $0E, $1C, $1D, $0A, $1B, $0D, $0A, $22, $2F, $24, $20, $11, $0A, $1D, $24, $0D, $18
+  ; .db $24, $22, $18, $1E, $24, $16, $0E, $0A, $17, $24, $22, $18, $1E, $24, $0A, $15, $1B, $0E, $0A, $0D, $22, $24, $1B, $0E, $1D, $1E, $1B, $17, $0E, $0D, $24, $24, $24, $12, $1D, $2F, $24, $0D, $18, $24, $22, $18, $1E, $24, $1B, $0E, $20, $12, $17, $0D, $0E, $0D, $24, $12, $1D, $24, $1B, $12, $10, $11, $1D, $2F, $24, $24
+  ; .db $24, $18, $11, $24, $10, $18, $0D, $24, $12, $24, $0C, $0A, $17, $24, $17, $18, $1D, $24, $0B, $0E, $15, $12, $0E, $1F, $0E, $0D, $24, $1D, $11, $12, $1C, $2F
+  
+  .db $24, $11, $0E, $22, $24, $11, $18, $17, $0E, $22, $2F, $24, $12, $24, $20, $0A, $17, $1D, $24, $1D, $18, $24, $1B, $0E 
+  .db $1D, $1E, $1B, $17, $24, $1D, $11, $0E, $24, $16, $18, $1F, $12, $0E, $24, $20, $0E, $24, $1C, $0A, $20, $24, $22, $0E 
+  .db $1C, $1D, $0A, $1B, $0D, $0A, $22, $2F, $24, $20, $11, $0A, $1D, $24, $0D, $18, $24, $22, $18, $1E, $24, $16, $0E, $0A 
+  .db $17, $24, $22, $18, $1E, $24, $0A, $15, $1B, $0E, $0A, $0D, $22, $24, $1B, $0E, $1D, $1E, $1B, $17, $0E, $0D, $24, $24 
+  .db $24, $12, $1D, $2F, $24, $0D, $18, $24, $22, $18, $1E, $24, $1B, $0E, $20, $12, $17, $0D, $0E, $0D, $24, $12, $1D, $24 
+  .db $1B, $12, $10, $11, $1D, $2F, $24, $24, $24, $18, $11, $24, $10, $18, $0D, $24, $12, $24, $0C, $0A, $17, $24, $17, $18 
+  .db $1D, $24, $0B, $0E, $15, $12, $0E, $1F, $0E, $0D, $24, $24, $24, $24, $24, $24, $24, $1D, $11, $12, $1C, $2F, $02, $11 
+  .db $0E, $22, $24, $11, $18, $17, $0E, $22, $2F, $24, $12, $24, $20, $0A, $17, $1D, $24, $1D, $18, $24, $24, $24, $24, $24 
+  .db $24, $1B, $0E, $1D, $1E, $1B, $17, $24, $1D, $11, $0E, $24, $16, $18, $1F, $12, $0E, $24, $20, $0E, $24, $1C, $0A, $20 
+  .db $24, $24, $24, $24, $24, $24, $24, $24, $24, $22, $0E, $1C, $1D, $0A, $1B, $0D, $0A, $22, $2F, $24, $20, $11, $0A, $1D 
+  .db $24, $0D, $18, $24, $22, $18, $1E, $24, $16, $0E, $0A, $17, $24, $22, $18, $1E, $24, $0A, $15, $1B, $0E, $0A, $0D, $22 
+  .db $24, $1B, $0E, $1D, $1E, $1B, $17, $0E, $0D, $24, $12, $1D, $2F, $24, $0D, $18, $24, $22, $18, $1E, $24, $24, $24, $24 
+  .db $24, $1B, $0E, $20, $12, $17, $0D, $0E, $0D, $24, $12, $1D, $24, $1B, $12, $10, $11, $1D, $2F, $24, $18, $11, $24, $10 
+  .db $18, $0D, $24, $12, $24, $0C, $0A, $17, $24, $17, $18, $1D, $24, $0B, $0E, $15, $12, $0E, $1F, $0E, $0D, $24, $1D, $11 
+  .db $12, $1C, $2F, $03, $11, $0E, $22, $24, $11, $18, $17, $0E, $22, $2F, $24, $12, $24, $20, $0A, $17, $1D, $24, $1D, $18 
+  .db $24, $1B, $0E, $1D, $1E, $1B, $17, $24, $1D, $11, $0E, $24, $16, $18, $1F, $12, $0E, $24, $20, $0E, $24, $1C, $0A, $20 
+  .db $24, $22, $0E, $1C, $1D, $0A, $1B, $0D, $0A, $22, $2F, $24, $20, $11, $0A, $1D, $24, $0D, $18, $24, $22, $18, $1E, $24 
+  .db $16, $0E, $0A, $17, $24, $22, $18, $1E, $24, $0A, $15, $1B, $0E, $0A, $0D, $22, $24, $1B, $0E, $1D, $1E, $1B, $17, $0E 
+  .db $0D, $24, $12, $1D, $2F, $24, $0D, $18, $24, $22, $18, $1E, $24, $24, $24, $24, $24, $1B, $0E, $20, $12, $17, $0D, $0E 
+  .db $0D, $24, $12, $1D, $24, $1B, $12, $10, $11, $1D, $2F, $24, $18, $11, $24, $10, $18, $0D, $24, $12, $24, $0C, $0A, $17 
+  .db $24, $17, $18, $1D, $24, $0B, $0E, $15, $12, $0E, $1F, $0E, $0D, $24, $1D, $11, $12, $1C, $2F, $04, $11, $0E, $22, $24 
+  .db $11, $18, $17, $0E, $22, $2F, $24, $12, $24, $20, $0A, $17, $1D, $24, $1D, $18, $24, $1B, $0E, $1D, $1E, $1B, $17, $24 
+  .db $1D, $11, $0E, $24, $16, $18, $1F, $12, $0E, $24, $20, $0E, $24, $1C, $0A, $20, $24, $22, $0E, $1C, $1D, $0A, $1B, $0D 
+  .db $0A, $22, $2F, $24, $20, $11, $0A, $1D, $24, $0D, $18, $24, $22, $18, $1E, $24, $16, $0E, $0A, $17, $24, $22, $18, $1E 
+  .db $24, $0A, $15, $1B, $0E, $0A, $0D, $22, $24, $1B, $0E, $1D, $1E, $1B, $17, $0E, $0D, $24, $12, $1D, $2F, $24, $0D, $18 
+  .db $24, $22, $18, $1E, $24, $24, $24, $24, $24, $1B, $0E, $20, $12, $17, $0D, $0E, $0D, $24, $12, $1D, $24, $1B, $12, $10 
+  .db $11, $1D, $2F, $24, $18, $11, $24, $10, $18, $0D, $24, $12, $24, $0C, $0A, $17, $24, $17, $18, $1D, $24, $0B, $0E, $15 
+  .db $12, $0E, $1F, $0E, $0D, $24, $1D, $11, $12, $1C, $2F
 
 ;;;;;;;;;;;;;
   
@@ -1883,20 +1927,22 @@ BufferToPPU:
   ; BNE BufferDone
   LDA writerWait
   CMP #TEXT_SPEED
-  BNE BufferDone
+  BEQ .continue
+  JMP .bufferDone
+.continue
   LDA #$00
   STA writerWait
   ; read page cursor, si es menos q 1, no hay q comparar el lettercursor aun, solo seguir aumentandolo
   LDA screenCounter
   CMP currentScreenAmount
-  BEQ BufferDone
+  BEQ .bufferDone
   LDA pageCursor
-  CMP currentPage
+  CMP currentTextLimit+1
   BNE .insertLetter
   ; read ppu cursor
   LDA letterCursor
-  CMP currentTextSize
-  BEQ BufferDone
+  CMP currentTextLimit+0
+  BEQ .stopWriter
 .insertLetter
   ; set ppu address
   LDA $2002             ; read PPU status to reset the high/low latch
@@ -1924,11 +1970,20 @@ BufferToPPU:
   ; LDA #$02
   ; JSR sound_load
 .writeContinue
+  LDA letterCounter
+  CLC 
+  ADC #$01
+  STA letterCounter
   LDA letterCursor
+  CLC
   ADC #$01
   STA letterCursor
   CMP #$00
   BNE .handlePPUAddress
+  LDA pageCounter
+  CLC
+  ADC #$01
+  STA pageCounter
   LDA pageCursor
   CLC
   ADC #$01
@@ -1939,12 +1994,16 @@ BufferToPPU:
   ADC #$01
   STA ppuCursorLow
   CMP #$00
-  BNE BufferDone
+  BNE .bufferDone
   LDA ppuCursorHigh
   CLC
   ADC #$01
   STA ppuCursorHigh
-BufferDone:
+.bufferDone:
+  RTS
+.stopWriter:
+  LDA currentScreenAmount
+  STA screenCounter
   RTS
 
 CheckDialogue:
@@ -1963,11 +2022,21 @@ CheckDialogue:
   STA currentPage
   LDA #DIALOGUE_1_SCREENS
   STA currentScreenAmount
+  LDA #DIALOGUE_1_LIMIT_LOW
+  STA currentTextLimit+0
+  LDA #DIALOGUE_1_LIMIT_HIGH
+  STA currentTextLimit+1
 .startDialogue:
+  LDA #$20
+  STA ppuCursorHigh
+  LDA #$40
+  STA ppuCursorLow
   LDA #$00
   STA letterCursor
   STA pageCursor
   STA screenCounter
+  STA pageCounter
+  STA letterCounter
   LDA #STATEINTRO
   STA gamestate
   LDA #$00 ;turn off ppu
