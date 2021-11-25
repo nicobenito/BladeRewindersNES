@@ -100,6 +100,7 @@ charSpriteY .rs 2
 ;simple buffer text
 letterCursor .rs 1
 pageCursor .rs 1
+screenCounter .rs 1
 currentTextSize .rs 1
 currentPage .rs 1
 ppuCursorLow .rs 1
@@ -107,6 +108,7 @@ ppuCursorHigh .rs 1
 writerWait .rs 1
 writerIsActive .rs 1
 currentText .rs 2
+currentScreenAmount .rs 1
 ; sound
 sound_ptr .rs 2
 jmp_ptr .rs 2           ;a pointer variable for indirect jumps
@@ -137,10 +139,16 @@ PPU_BUFFER     = $0400
 PAUSEDBTN      = $01
 REWINDBTN      = $02
 
-; text
+; text intro
 TEXTSIZE_LOW   = $F0
 TEXTSIZE_PAGES  = $02
-TEXT_SPEED = $04
+TEXT_SCREENS = $01
+TEXT_SPEED = $01
+
+; dialogue one
+DIALOGUE_1_LOW = $A1
+DIALOGUE_1_PAGES  = $00
+DIALOGUE_1_SCREENS = $01
 
 ;;;;;;;;;;;;;;;;;;
 
@@ -389,6 +397,8 @@ ReadStartBtn:
   STA currentText+0
   LDA #HIGH(firstText)
   STA currentText+1
+  LDA #TEXT_SCREENS
+  STA currentScreenAmount
   ; LDA #$01 ; set writer for next screen
   ; STA writerIsActive
 ReadStartBtnDone:
@@ -413,6 +423,9 @@ EngineIntro:
   LDA writerWait
   CMP #TEXT_SPEED
   BNE ReadIntroStartBtnDone
+  LDA screenCounter ; lo movi por arriba del letter cursor para evitar que no se pueda presionar start por el BEQ ReadIntroStartBtnDone
+  CMP currentScreenAmount
+  BEQ ReadIntroStartBtn
   LDY letterCursor
   LDA currentText+0
   STA pointerLo
@@ -423,9 +436,30 @@ EngineIntro:
   BEQ ReadIntroStartBtnDone
   LDA #$02
   JSR sound_load
+  LDA pageCursor
+  CMP currentPage
+  BNE ReadIntroStartBtnDone
   LDA letterCursor
   CMP currentTextSize
   BNE ReadIntroStartBtnDone
+; continue to next page, set everything
+  LDA screenCounter
+  CLC
+  ADC #$01
+  STA screenCounter
+  LDA #$20
+  STA ppuCursorHigh
+  LDA #$40
+  STA ppuCursorLow
+  LDA #$00
+  STA letterCursor
+  STA pageCursor
+  LDA #$00
+  STA $2001
+  LDA screenCounter ; para evitar q se limpie la pantalla si ya se alcanzo la pagina final.
+  CMP currentScreenAmount
+  BEQ ReadIntroStartBtn
+  JSR LoadBlackScreen
 ReadIntroStartBtn:
   LDA #$00 
   JSR sound_load
@@ -436,7 +470,7 @@ ReadIntroStartBtn:
   ; turn PPU off
   LDA #$00
   STA $2001
-  JSR LoadLevel
+  JSR ResetLevel
   LDA #STATEPLAYING
   STA gamestate
   ; LDA #$00
@@ -1407,6 +1441,7 @@ LoadNxtLevel:
   CLC
   ADC #$01
   STA levelNumber
+  JSR CheckDialogue
 ResetLevel:
   LDA #$00
   STA playerLost
@@ -1634,46 +1669,43 @@ InitialInsideLoop:
   RTS
 
 ;;;; black screen
-LoadBlackScreen:
-  LDA $2002             ; read PPU status to reset the high/low latch
-  LDA #$20
-  STA $2006             ; write the high byte of $2000 address
-  LDA #$00
-  STA $2006             ; write the low byte of $2000 address
+; LoadBlackScreen:
+;   LDA $2002             ; read PPU status to reset the high/low latch
+;   LDA #$20
+;   STA $2006             ; write the high byte of $2000 address
+;   LDA #$00
+;   STA $2006             ; write the low byte of $2000 address
   
-  LDX #$00            ; start at pointer + 0
-  LDY #$00
-.initialOutsideLoop:
+;   LDX #$00            ; start at pointer + 0
+;   LDY #$00
+; .initialOutsideLoop:
   
-.initialInsideLoop:
-  LDA #$24  ; copy one background byte from address in pointer plus Y
-  STA $2007           ; this runs 256 * 4 times
+; .initialInsideLoop:
+;   LDA #$24  ; copy one background byte from address in pointer plus Y
+;   STA $2007           ; this runs 256 * 4 times
   
-  INY                 ; inside loop counter
-  CPY #$00
-  BNE .initialInsideLoop      ; run the inside loop 256 times before continuing down  
-  INX
-  CPX #$04
-  BNE .initialOutsideLoop     ; run the outside loop 256 times before continuing down
+;   INY                 ; inside loop counter
+;   CPY #$00
+;   BNE .initialInsideLoop      ; run the inside loop 256 times before continuing down  
+;   INX
+;   CPX #$04
+;   BNE .initialOutsideLoop     ; run the outside loop 256 times before continuing down
   
-  ;; write attributes, in this case black and white (3rd palette)
-  LDA $2002             ; read PPU status to reset the high/low latch
-  LDA #$23
-  STA $2006             ; write the high byte of $23C0 address
-  LDA #$C0
-  STA $2006             ; write the low byte of $23C0 address
-  LDX #$00              ; start out at 0
-.loadAttributeLoop:
-  LDA #%11111111     ; load data from address (attribute + the value in x)
-  STA $2007             ; write to PPU
-  INX                   ; X = X + 1
-  CPX #$40              ; Compare X to hex $08, decimal 8 - copying 8 bytes
-  BNE .loadAttributeLoop
-  RTS
-
-;;;;;;;;;;;;
-;;;;;;;;;;;;
-; Text ENGINE
+;   ;; write attributes, in this case black and white (3rd palette)
+;   LDA $2002             ; read PPU status to reset the high/low latch
+;   LDA #$23
+;   STA $2006             ; write the high byte of $23C0 address
+;   LDA #$C0
+;   STA $2006             ; write the low byte of $23C0 address
+;   LDX #$00              ; start out at 0
+; .loadAttributeLoop:
+;   LDA #%11111111     ; load data from address (attribute + the value in x)
+;   STA $2007             ; write to PPU
+;   INX                   ; X = X + 1
+;   CPX #$40              ; Compare X to hex $08, decimal 8 - copying 8 bytes
+;   BNE .loadAttributeLoop
+;   JSR CleanSprites
+;   RTS
 
 ;;;;;;;;;;;;
 ;;;;;;;;;;;;;
@@ -1824,6 +1856,10 @@ firstText:
   .db $0D, $0E, $24, $1F, $12, $0D, $0E, $18, $24, $24, $24, $24, $24, $24, $24, $1C, $1D, $18, $1B, $0E, $1C, $24, $0D, $0E, $1D, $0E, $1B, $16, $12, $17, $18, $24, $15, $0A, $24, $15, $0E, $22, $24, $0D, $0E, $15, $24, $19, $1B, $0E, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $0D, $18, $2F, $24, $0C, $0A, $0D, $0A
   .db $24, $0C, $15, $12, $0E, $17, $1D, $0E, $24, $1D, $0E, $17, $12, $0A, $24, $24, $1A, $1E, $0E, $24, $0D, $0E, $1F, $18, $15, $1F, $0E, $1B, $24, $15, $0A, $1C, $24, $19, $0E, $15, $12, $0C, $1E, $15, $0A, $1C, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $0D, $0A, $1C, $01, $2F, $24
 
+dialogueOne:
+  .db $24, $11, $0E, $22, $24, $11, $18, $17, $0E, $22, $2F, $24, $12, $24, $20, $0A, $17, $1D, $24, $1D, $18, $24, $1B, $0E, $1D, $1E, $1B, $17, $24, $1D, $11, $0E, $24, $16, $18, $1F, $12, $0E, $24, $20, $0E, $24, $1C, $0A, $20, $24, $22, $0E, $1C, $1D, $0A, $1B, $0D, $0A, $22, $2F, $24, $20, $11, $0A, $1D, $24, $0D, $18
+  .db $24, $22, $18, $1E, $24, $16, $0E, $0A, $17, $24, $22, $18, $1E, $24, $0A, $15, $1B, $0E, $0A, $0D, $22, $24, $1B, $0E, $1D, $1E, $1B, $17, $0E, $0D, $24, $24, $24, $12, $1D, $2F, $24, $0D, $18, $24, $22, $18, $1E, $24, $1B, $0E, $20, $12, $17, $0D, $0E, $0D, $24, $12, $1D, $24, $1B, $12, $10, $11, $1D, $2F, $24, $24
+  .db $24, $18, $11, $24, $10, $18, $0D, $24, $12, $24, $0C, $0A, $17, $24, $17, $18, $1D, $24, $0B, $0E, $15, $12, $0E, $1F, $0E, $0D, $24, $1D, $11, $12, $1C, $2F
 
 
 ;;;;;;;;;;;;;
@@ -1851,6 +1887,9 @@ BufferToPPU:
   LDA #$00
   STA writerWait
   ; read page cursor, si es menos q 1, no hay q comparar el lettercursor aun, solo seguir aumentandolo
+  LDA screenCounter
+  CMP currentScreenAmount
+  BEQ BufferDone
   LDA pageCursor
   CMP currentPage
   BNE .insertLetter
@@ -1908,7 +1947,106 @@ BufferToPPU:
 BufferDone:
   RTS
 
+CheckDialogue:
+  LDA levelNumber
+  CMP #$01
+  BEQ .setDialogueOne
+  RTS
+.setDialogueOne
+  LDA #LOW(dialogueOne)
+  STA currentText+0
+  LDA #HIGH(dialogueOne)
+  STA currentText+1
+  LDA #DIALOGUE_1_LOW
+  STA currentTextSize
+  LDA #DIALOGUE_1_PAGES
+  STA currentPage
+  LDA #DIALOGUE_1_SCREENS
+  STA currentScreenAmount
+.startDialogue:
+  LDA #$00
+  STA letterCursor
+  STA pageCursor
+  STA screenCounter
+  LDA #STATEINTRO
+  STA gamestate
+  LDA #$00 ;turn off ppu
+  STA $2001
+  JSR LoadBlackScreen
+  JMP Forever ;wait for NMI
 
+CleanSprites:
+  ; clean sprites
+  LDA #$00
+  LDX #$00
+.cleanPPULoop:
+  STA PLAYERY, x
+  INX
+  CPX spritesAmount
+  BNE .cleanPPULoop
+  RTS
+
+LoadBlackScreen:
+  LDA $2002             ; read PPU status to reset the high/low latch
+  LDA #$20
+  STA $2006             ; write the high byte of $2000 address
+  LDA #$00
+  STA $2006             ; write the low byte of $2000 address
+  
+  LDX #$00            ; start at pointer + 0
+  LDY #$00
+.initialOutsideLoop:
+  
+.initialInsideLoop:
+  LDA #$24  ; copy one background byte from address in pointer plus Y
+  STA $2007           ; this runs 256 * 4 times
+  
+  INY                 ; inside loop counter
+  CPY #$00
+  BNE .initialInsideLoop      ; run the inside loop 256 times before continuing down  
+  INX
+  CPX #$04
+  BNE .initialOutsideLoop     ; run the outside loop 256 times before continuing down
+  
+  ;; write attributes, in this case black and white (3rd palette)
+  LDA $2002             ; read PPU status to reset the high/low latch
+  LDA #$23
+  STA $2006             ; write the high byte of $23C0 address
+  LDA #$C0
+  STA $2006             ; write the low byte of $23C0 address
+  LDX #$00              ; start out at 0
+.loadAttributeLoop:
+  LDA #%11111111     ; load data from address (attribute + the value in x)
+  STA $2007             ; write to PPU
+  INX                   ; X = X + 1
+  CPX #$40              ; Compare X to hex $08, decimal 8 - copying 8 bytes
+  BNE .loadAttributeLoop
+  JSR CleanSprites
+  RTS
+
+; TransitionEffect:
+;   ; set ppu address
+;   LDA $2002             ; read PPU status to reset the high/low latch
+;   LDA ppuCursorHigh
+;   STA $2006             ; write the high byte of $2000 address
+;   LDA ppuCursorLow
+;   STA $2006             ; write the low byte of $2000 address
+;   ; read letter buffer with letter cursor
+;   LDA #$25
+;   STA $2007
+; .transitionContinue
+;   LDA ppuCursorLow
+;   CLC
+;   ADC #$01
+;   STA ppuCursorLow
+;   CMP #$00
+;   BNE .done
+;   LDA ppuCursorHigh
+;   CLC
+;   ADC #$01
+;   STA ppuCursorHigh
+; .done:
+;   RTS
 ;;;;;;;;;;;; screens and pointers below ;;;;;;;;;;;;;;;;;;
 
 

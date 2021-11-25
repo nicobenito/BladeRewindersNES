@@ -39,8 +39,10 @@ const letters = {
     9: "09"
 };
 
-// intro text 1 - 751 buen numero para completar 1 pantalla con txt.
-const message = `in the 90s movies were the entertainment first choice. movies were stored on a revolutionary technology called the vhs. el aumento de demanda genero una necesidad imprevista. no era posible rebobinar las peliculas a tiempo. fue entonces cuando el comite de video stores determino la ley del pre rebobinado. cada cliente tenia que devolver las peliculas rebobinadas. 123fue entonces cuando el comite de video stores determino la ley del pre rebobinado. cada cliente tenia que devolver las peliculas rebobinadas. 321fue entonces cuando el comite de video stores determino la ley del pre rebobinado. cada cliente tenia que devolver las peliculas rebobinadas1. `;
+////// intro text 1 - 751 buen numero para completar 1 pantalla con txt.
+//const message = `in the 90s movies were the entertainment first choice. movies were stored on a revolutionary technology called the vhs. el aumento de demanda genero una necesidad imprevista. no era posible rebobinar las peliculas a tiempo. fue entonces cuando el comite de video stores determino la ley del pre rebobinado. cada cliente tenia que devolver las peliculas rebobinadas. 123fue entonces cuando el comite de video stores determino la ley del pre rebobinado. cada cliente tenia que devolver las peliculas rebobinadas. 321fue entonces cuando el comite de video stores determino la ley del pre rebobinado. cada cliente tenia que devolver las peliculas rebobinadas1. `;
+///// dialogue 1
+const message = `hey honey. i want to return the movie we saw yestarday. what do you mean you already returned it. do you rewinded it right. oh god i can not believed this.`;
 
 const stringToHex = () => {
     /*
