@@ -43,6 +43,7 @@ const letters = {
 //const message = `in the 90s movies were the entertainment first choice. movies were stored on a revolutionary technology called the vhs. el aumento de demanda genero una necesidad imprevista. no era posible rebobinar las peliculas a tiempo. fue entonces cuando el comite de video stores determino la ley del pre rebobinado. cada cliente tenia que devolver las peliculas rebobinadas. 123fue entonces cuando el comite de video stores determino la ley del pre rebobinado. cada cliente tenia que devolver las peliculas rebobinadas. 321fue entonces cuando el comite de video stores determino la ley del pre rebobinado. cada cliente tenia que devolver las peliculas rebobinadas1. `;
 ///// dialogue 1
 const message = `hey honey. i want to return the movie we saw yestarday. what do you mean you already returned it. do you rewinded it right. oh god i can not believed this.2hey honey. i want to return the movie we saw yestarday. what do you mean you already returned it. do you rewinded it right. oh god i can not believed this.3hey honey. i want to return the movie we saw yestarday. what do you mean you already returned it. do you rewinded it right. oh god i can not believed this.4hey honey. i want to return the movie we saw yestarday. what do you mean you already returned it. do you rewinded it right. oh god i can not believed this.`;
+const txtLimit = 170; // dialogue limit
 
 const stringToHex = () => {
     /*
@@ -66,6 +67,16 @@ const stringToHex = () => {
     reemplazo cada caracter por $+hexa q correponda.
     cuenta el length, muestro el total.
 
+    -------- txt limit
+    defino limite
+    idea 1:
+    -divido el txt por el limite
+    -proceso ese txt con los espacios
+    -al resultado le agrego los espacios faltantes
+    ? como evito cortar palabras?
+    
+    idea2:
+    -
 
      */
     let stringHex = "";
@@ -73,18 +84,33 @@ const stringToHex = () => {
     let lineArray = [];
     const lineTotal = 32;
     let lineCounter = 0;
+    let limitCounter = 0;
+    let pageCounter = 1;
     const words = message.split(" ");
     words.forEach(word => {
+        if (word.length + limitCounter > txtLimit) {
+            const letters1 = resultArray.join('').length;
+            const resultDone = txtLimit * pageCounter - letters1;
+            for (let i = 0; i < resultDone; i++) {
+                resultArray.push("_");
+            };
+            const letters = resultArray.join('').length;
+            lineCounter = lineArray.join('').length;
+            limitCounter = 0;
+            pageCounter ++;
+        }
         if (word.length + lineCounter + 1 <= lineTotal) {
             lineArray.push("_");
             lineArray.push(word);
             lineCounter = lineCounter + word.length + 1;
+            limitCounter = limitCounter + word.length + 1;
         } else {
             lineArray.forEach(element => {
                 resultArray.push(element);
             });
             for (let i = 0; i < lineTotal - lineCounter; i++) {
                 resultArray.push("_");
+                limitCounter ++;
             };
             if (word == words[words.length - 1]) {
                 resultArray.push("_");
@@ -95,6 +121,7 @@ const stringToHex = () => {
                 lineArray.push("_");
                 lineArray.push(word);
                 lineCounter = lineCounter + word.length + 1;
+                limitCounter = limitCounter + word.length + 1;
             }            
         }
     });
@@ -110,13 +137,26 @@ const stringToHex = () => {
 
     console.log(resultMessage);
     for (let i = 0; i < resultMessage.length; i++) {
+        // if (i % 20 === 0  ) {
+        //     stringHex += "\n.db ";
+        // }
         stringHex += '$'
         stringHex += letters[resultMessage[i]];
         stringHex += ', '
     }
-    console.log(stringHex);
+    // console.log(stringHex);
     console.log(resultMessage.length);
     console.log(stringHex.split(", ").length.toString(16));
+    const resultHex = stringHex.split(",");
+    let toPrint = '';
+    for (let i = 0; i < resultHex.length; i++) {
+        if (i % 20 === 0  ) {
+            toPrint += "\n.db";
+        }
+        toPrint += resultHex[i];
+        toPrint+= ',';
+    }
+    console.log(toPrint);
 }
 
 stringToHex();
