@@ -5,7 +5,7 @@ song4_header:
     .byte $01           ;status byte (stream enabled)
     .byte SQUARE_1      ;which channel
     .byte $B0           ;initial duty (10)
-    .byte ve_battlekid_1b  ;volume envelope
+    .byte ve_battlekid_2  ;volume envelope
     .word song4_square1 ;pointer to stream
     .byte $60           ;tempo
     
@@ -13,7 +13,7 @@ song4_header:
     .byte $01           ;status byte (stream enabled)
     .byte SQUARE_2      ;which channel
     .byte $30           ;initial duty (00)
-    .byte ve_short_staccato ;volume envelope
+    .byte ve_battlekid_2 ;volume envelope
     .word song4_square2 ;pointer to stream
     .byte $60           ;tempo
     
@@ -21,7 +21,7 @@ song4_header:
     .byte $01           ;status byte (stream enabled)
     .byte TRIANGLE      ;which channel
     .byte $81           ;initial volume (on)
-    .byte ve_battlekid_1b  ;volume envelope
+    .byte ve_battlekid_2  ;volume envelope
     .word song4_tri     ;pointer to stream
     .byte $60           ;tempo
     
