@@ -409,6 +409,8 @@ song_headers:
     .word pause_header  ;pause button sound
     .word catch_header
     .word logo1_header
+    .word victory_header
+    .word rewind_header
     
     .include "sound_opcodes.asm"    ;our opcode subroutines, jump table and aliases
     .include "note_table.i" ;period lookup table for notes
@@ -424,3 +426,5 @@ song_headers:
     .include "pause1.i"
     .include "catch1.i"
     .include "logo1.i"
+    .include "victory.i"
+    .include "rewind.i"

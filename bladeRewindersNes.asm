@@ -1003,7 +1003,7 @@ CheckRewindBtn:
   LDA currentIsPlayer
   CMP #$01
   BNE ButtonsLoopDone
-  ; set rewindaction
+  ; set rewind action
   JSR RewindBRs
   RTS
 ButtonsLoopContinue:
@@ -1018,6 +1018,8 @@ RewindBRs:
   ; set rewindtrigger to prevent move
   LDA #$01
   STA hasRewinded
+  LDA #$0B
+  JSR sound_load
   ; get last position of one and apply
   LDA brOneLastCoorX
   STA brOneCoorX
@@ -1447,6 +1449,8 @@ CheckIfExit:
   BNE CheckIfExitDone
   LDA #$01
   STA playerHasWon
+  LDA #$0A
+  JSR sound_load
   JSR LoadNxtLevel
 CheckIfExitDone:
   RTS
@@ -2949,41 +2953,6 @@ initialScreenPointers:
   .bank 3
   .org $E000
 
-
-spritesLvl22:
-     ;vert tile attr horiz
-  ; .db $80, $50, $03, $80
-  ; .db $80, $51, $03, $88
-  ; .db $88, $60, $03, $80
-  ; .db $88, $61, $03, $88
-  ; .db $90, $70, $03, $80
-  ; .db $90, $71, $03, $88
-  ; ;BR 1 full body
-  ; .db $73, $52, $02, $64
-  ; .db $73, $53, $02, $6C
-  ; .db $6B, $62, $02, $64
-  ; .db $6B, $63, $02, $6C
-  ; .db $63, $72, $02, $64
-  ; .db $63, $73, $02, $6C
-  ; .db $83, $41, $00, $6C   ;sprite 1
-  ; .db $8B, $41, $00, $9C   ;sprite 1
-  .db $67, $04, $01, $92 ; exit
-  .db $67, $05, $01, $9A
-  .db $67, $06, $01, $A2
-  .db $67, $07, $01, $AA
-  .db $6F, $14, $01, $92
-  .db $6F, $15, $01, $9A
-  .db $6F, $16, $01, $A2
-  .db $6F, $17, $01, $AA
-  .db $98, $20, $01, $32 ; pause btn
-  .db $98, $21, $01, $3A
-  .db $98, $22, $01, $42
-  .db $98, $23, $01, $4A
-  .db $A0, $30, $01, $32
-  .db $A0, $31, $01, $3A
-  .db $A0, $32, $01, $42
-  .db $A0, $33, $01, $4A
-
 spritesCharacters:
      ;vert tile attr horiz
   ;player
@@ -3002,42 +2971,6 @@ spritesCharacters:
   .db $63, $73, $02, $6C
 
 spritesLvl3:
-  .db $67, $04, $01, $92 ; exit
-  .db $67, $05, $01, $9A
-  .db $67, $06, $01, $A2
-  .db $67, $07, $01, $AA
-  .db $6F, $14, $01, $92
-  .db $6F, $15, $01, $9A
-  .db $6F, $16, $01, $A2
-  .db $6F, $17, $01, $AA
-  .db $98, $20, $01, $32 ; pause btn
-  .db $98, $21, $01, $3A
-  .db $98, $22, $01, $42
-  .db $98, $23, $01, $4A
-  .db $A0, $30, $01, $32
-  .db $A0, $31, $01, $3A
-  .db $A0, $32, $01, $42
-  .db $A0, $33, $01, $4A
-
-spritesLvl0:
-  .db $67, $04, $01, $92 ; exit
-  .db $67, $05, $01, $9A
-  .db $67, $06, $01, $A2
-  .db $67, $07, $01, $AA
-  .db $6F, $14, $01, $92
-  .db $6F, $15, $01, $9A
-  .db $6F, $16, $01, $A2
-  .db $6F, $17, $01, $AA
-  .db $98, $20, $01, $32 ; pause btn
-  .db $98, $21, $01, $3A
-  .db $98, $22, $01, $42
-  .db $98, $23, $01, $4A
-  .db $A0, $30, $01, $32
-  .db $A0, $31, $01, $3A
-  .db $A0, $32, $01, $42
-  .db $A0, $33, $01, $4A
-
-spritesLvl01:
   .db $67, $04, $01, $92 ; exit
   .db $67, $05, $01, $9A
   .db $67, $06, $01, $A2
