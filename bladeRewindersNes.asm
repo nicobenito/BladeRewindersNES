@@ -1,4 +1,4 @@
-  .inesprg 1   ; 1x 16KB PRG code
+  .inesprg 2   ; 1x 16KB PRG code
   .ineschr 2   ; 1x  8KB CHR data
   .inesmap 3   ; mapper 0 = NROM, no bank swapping
   .inesmir 1   ; background mirroring
@@ -144,13 +144,13 @@ PPU_BUFFER     = $0400
 PAUSEDBTN      = $01
 REWINDBTN      = $02
 
-TEXT_SPEED = $03
+TEXT_SPEED = $01
 ; text intro
 TEXTSIZE_LOW   = $F0 ;low byte page/screen limit
 TEXTSIZE_PAGES  = $02 ;high byte page/screen limit, if limit is 1byte long its 00
 TEXT_SCREENS = $02
 TEXT_LIMIT_LOW = $1C
-TEXT_LIMIT_HIGH = $03
+TEXT_LIMIT_HIGH = $00 ; original $03
 
 ; dialogue one
 DIALOGUE_1_LOW = $AA
@@ -194,9 +194,9 @@ LAST_LEVEL = $06
   
   .include "sound_engine.asm"
 
-;----- second 8k bank of PRG-ROM    
-  ; .bank 1
-  ; .org $A000
+;----- second 8k bank of PRG-ROM
+  .bank 1
+  .org $A000
 
 RESET:
   SEI          ; disable IRQs
@@ -261,7 +261,7 @@ LoadPalettesLoop:
   BNE LoadPalettesLoop  ; Branch to LoadPalettesLoop if compare was Not Equal to zero
                         ; if compare was equal to 32, keep going down
 
-  LDA #$05 ;lvl number - 1
+  LDA #$00 ;lvl number - 1
   STA levelNumber
   LDA #$00
   STA letterCursor
@@ -273,12 +273,12 @@ LoadPalettesLoop:
   STA ppuCursorLow
 
   ;deactive intial screens
-  JSR LoadLevel
+  ;JSR LoadLevel
   
   ; LOADING TITLE SCREEN
-  ; LDA #$00
-  ; STA initialBGNumber
-  ; JSR LoadBlackScreen
+  LDA #$00
+  STA initialBGNumber
+  JSR LoadBlackScreen
   
   ; set screen player position
   LDA #$A3
@@ -305,8 +305,8 @@ LoadPalettesLoop:
 
 
 ;;:Set starting game state
-  ;LDA #STATELOGO
-  LDA #STATEPLAYING
+  LDA #STATELOGO
+  ;LDA #STATEPLAYING
   STA gamestate
 
 
@@ -345,7 +345,7 @@ NMI:
                             ;this ensures our sound engine gets run once per frame.
 
   JSR ReadController1  ;;get the current button data for player 1
-  JSR ReadController2  ;;get the current button data for player 2
+  ; JSR ReadController2  ;;get the current button data for player 2
   
 GameEngine:  
   LDA gamestate
@@ -377,14 +377,14 @@ GameEngineDone:
   RTI             ; return from interrupt
 
 EngineLogo: ; need to fix timer
-  JSR TimeWait
-  LDA wcount
-  CMP #$00
-  BNE EngineLogoDone
-  ; ReadStartLogoBtn:
-  ; LDA buttons1
-  ; AND #%00100000
-  ; BEQ EngineLogoDone ;btn not pressed
+;   JSR TimeWait
+;   LDA wcount
+;   CMP #$00
+;   BNE EngineLogoDone
+;   ; ReadStartLogoBtn:
+;   ; LDA buttons1
+;   ; AND #%00100000
+;   ; BEQ EngineLogoDone ;btn not pressed
   LDA #$01
   STA initialBGNumber
   ; LDA gamestate
@@ -781,22 +781,22 @@ UpdateSprites:
   STA charSpriteY+1
   JSR UpdateCharactersSprites
   ; update BR two
-  LDA brsAmount
-  CMP #$02
-  BNE UpdateSpritesDone
-  LDA brTwoPosX
-  STA charPosX
-  LDA brTwoPosY
-  STA charPosY
-  LDA #LOW(BRTWOX)
-  STA charSpriteX+0
-  LDA #HIGH(BRTWOX)
-  STA charSpriteX+1
-  LDA #LOW(BRTWOY)
-  STA charSpriteY+0
-  LDA #HIGH(BRTWOY)
-  STA charSpriteY+1
-  JSR UpdateCharactersSprites
+  ; LDA brsAmount
+  ; CMP #$02
+  ; BNE UpdateSpritesDone
+  ; LDA brTwoPosX
+  ; STA charPosX
+  ; LDA brTwoPosY
+  ; STA charPosY
+  ; LDA #LOW(BRTWOX)
+  ; STA charSpriteX+0
+  ; LDA #HIGH(BRTWOX)
+  ; STA charSpriteX+1
+  ; LDA #LOW(BRTWOY)
+  ; STA charSpriteY+0
+  ; LDA #HIGH(BRTWOY)
+  ; STA charSpriteY+1
+  ; JSR UpdateCharactersSprites
 UpdateSpritesDone:  
   RTS
 
@@ -950,17 +950,17 @@ CheckForBRs:
   STA canMove
   RTS
 BrContinue:
-  LDA brsAmount
-  CMP #$02
-  BNE CheckBRDone
-  LDA brTwoCoorX
-  CMP playerPossibleCoorX
-  BNE CheckBRDone
-  LDA brTwoCoorY
-  CMP playerPossibleCoorY
-  BNE CheckBRDone
-  LDA #$00
-  STA canMove
+  ; LDA brsAmount
+  ; CMP #$02
+  ; BNE CheckBRDone
+  ; LDA brTwoCoorX
+  ; CMP playerPossibleCoorX
+  ; BNE CheckBRDone
+  ; LDA brTwoCoorY
+  ; CMP playerPossibleCoorY
+  ; BNE CheckBRDone
+  ; LDA #$00
+  ; STA canMove
 CheckBRDone:
   RTS
 
@@ -1031,14 +1031,14 @@ RewindBRs:
   LDA brsAmount
   CMP #$01
   BEQ RewindDone
-  LDA brTwoLastCoorX
-  STA brTwoCoorX
-  LDA brTwoLastCoorY
-  STA brTwoCoorY
-  LDA brTwoLastPosX
-  STA brTwoPosX
-  LDA brTwoLastPosY
-  STA brTwoPosY
+  ; LDA brTwoLastCoorX
+  ; STA brTwoCoorX
+  ; LDA brTwoLastCoorY
+  ; STA brTwoCoorY
+  ; LDA brTwoLastPosX
+  ; STA brTwoPosX
+  ; LDA brTwoLastPosY
+  ; STA brTwoPosY
 RewindDone:
   RTS
 
@@ -1090,42 +1090,41 @@ ContinueMove:
   LDA brCurrentPaused
   STA brOnePaused
 NextBrMove:
-  LDA brsAmount
-  CMP #$02
-  BNE MoveBrsDone
-  LDA brTwoPaused
-  CMP #$01
-  BEQ MoveBrsDone
-  LDA brTwoPosX
-  STA brCurrentPosX
-  LDA brTwoPosY
-  STA brCurrentPosY
-  LDA brTwoCoorX
-  STA brCurrentCoorX
-  LDA brTwoCoorY
-  STA brCurrentCoorY
-  JSR MoveBROne
-  ; store previous position
-  LDA brTwoPosX
-  STA brTwoLastPosX
-  LDA brTwoPosY
-  STA brTwoLastPosY
-  LDA brTwoCoorX
-  STA brTwoLastCoorX
-  LDA brTwoCoorY
-  STA brTwoLastCoorY
-  ;apply results to brTwo
-  LDA brCurrentPosX
-  STA brTwoPosX
-  LDA brCurrentPosY
-  STA brTwoPosY
-  LDA brCurrentCoorX
-  STA brTwoCoorX
-  LDA brCurrentCoorY
-  STA brTwoCoorY
-  LDA brCurrentPaused
-  STA brTwoPaused
-
+  ; LDA brsAmount
+  ; CMP #$02
+  ; BNE MoveBrsDone
+  ; LDA brTwoPaused
+  ; CMP #$01
+  ; BEQ MoveBrsDone
+  ; LDA brTwoPosX
+  ; STA brCurrentPosX
+  ; LDA brTwoPosY
+  ; STA brCurrentPosY
+  ; LDA brTwoCoorX
+  ; STA brCurrentCoorX
+  ; LDA brTwoCoorY
+  ; STA brCurrentCoorY
+  ; JSR MoveBROne
+  ; ; store previous position
+  ; LDA brTwoPosX
+  ; STA brTwoLastPosX
+  ; LDA brTwoPosY
+  ; STA brTwoLastPosY
+  ; LDA brTwoCoorX
+  ; STA brTwoLastCoorX
+  ; LDA brTwoCoorY
+  ; STA brTwoLastCoorY
+  ; ;apply results to brTwo
+  ; LDA brCurrentPosX
+  ; STA brTwoPosX
+  ; LDA brCurrentPosY
+  ; STA brTwoPosY
+  ; LDA brCurrentCoorX
+  ; STA brTwoCoorX
+  ; LDA brCurrentCoorY
+  ; STA brTwoCoorY
+  ; LDA brCurrentPaused
+  ; STA brTwoPaused
 MoveBrsDone:
   RTS
   ;check BR total number on level
@@ -1495,7 +1494,7 @@ LoadNxtLevel:
   CLC
   ADC #$01
   STA levelNumber
-  JSR CheckDialogue
+  ;JSR CheckDialogue
 ResetLevel:
   ; check if game is done, if it is, jmp to reset? or go to reset routine.
   LDA levelNumber
@@ -1550,28 +1549,77 @@ ReadController1Loop:
   BNE ReadController1Loop
   RTS
   
-ReadController2:
-  LDA #$01
-  STA $4016
-  LDA #$00
-  STA $4016
-  LDX #$08
-ReadController2Loop:
-  LDA $4017
-  LSR A            ; bit0 -> Carry
-  ROL buttons2     ; bit0 <- Carry
-  DEX
-  BNE ReadController2Loop
-  RTS  
+; ReadController2:
+;   LDA #$01
+;   STA $4016
+;   LDA #$00
+;   STA $4016
+;   LDX #$08
+; ReadController2Loop:
+;   LDA $4017
+;   LSR A            ; bit0 -> Carry
+;   ROL buttons2     ; bit0 <- Carry
+;   DEX
+;   BNE ReadController2Loop
+;   RTS  
 
 LoadLevel:
   lda levelNumber ;gets the number of the current level
 	asl A ;multiplies it by 2 since each pointer is 2 bytes
 	tax ;use it as an index
-	lda spritesPointers+0, x ;copies the low byte to ZP
+  ; LDY levelNumber
+  ; CPY #$02
+  ; BPL .secondSprites
+  LDA levelNumber
+  CMP #$00
+  BEQ .setOne
+.setOne
+  lda spritesLvl1+0 ;copies the low byte to ZP
 	sta levelSprites+0
-	lda spritesPointers+1, x ;copies the high byte to ZP
+	lda spritesLvl1+1;copies the high byte to ZP
 	sta levelSprites+1
+  jmp .continue
+.setTwo
+  lda spritesLvl2+0 ;copies the low byte to ZP
+	sta levelSprites+0
+	lda spritesLvl2+1;copies the high byte to ZP
+	sta levelSprites+1
+  jmp .continue
+.setThree
+  lda spritesLvl3+0 ;copies the low byte to ZP
+	sta levelSprites+0
+	lda spritesLvl3+1;copies the high byte to ZP
+	sta levelSprites+1
+  jmp .continue
+.setFour
+  lda spritesLvl4+0 ;copies the low byte to ZP
+	sta levelSprites+0
+	lda spritesLvl4+1;copies the high byte to ZP
+	sta levelSprites+1
+  jmp .continue
+.setFive
+  lda spritesLvl5+0 ;copies the low byte to ZP
+	sta levelSprites+0
+	lda spritesLvl5+1;copies the high byte to ZP
+	sta levelSprites+1
+  jmp .continue
+.setSix
+  lda spritesLvl6+0 ;copies the low byte to ZP
+	sta levelSprites+0
+	lda spritesLvl6+1;copies the high byte to ZP
+	sta levelSprites+1	
+  jmp .continue
+  ; lda spritesPointers+0, x ;copies the low byte to ZP
+	; sta levelSprites+0
+	; lda spritesPointers+1, x ;copies the high byte to ZP
+	; sta levelSprites+1
+;   jmp .continue
+; .secondSprites:
+;   lda spritesPointersTwo+0, x ;copies the low byte to ZP
+; 	sta levelSprites+0
+; 	lda spritesPointersTwo+1, x ;copies the high byte to ZP
+; 	sta levelSprites+1
+.continue
   LDY levelNumber
   LDA spritesTotalPerLvl, y
   STA spritesAmount
@@ -1605,12 +1653,18 @@ LoadLevel:
 LoadSprites:
   LDY #$00              ; start at 0
 LoadSpritesLoop:
-  LDA [levelSprites], y        ; load data from address (sprites +  x)
+  LDA spritesCharacters, y        ; load data from address (sprites +  x)
   STA $0200, y          ; store into RAM address ($0200 + x)
   INY                   ; X = X + 1
-  CPY spritesAmount     ; Compare X to hex $10, decimal
+  CPY #$30     ; Compare X to hex $10, decimal
   BNE LoadSpritesLoop   ; Branch to LoadSpritesLoop if compare was Not Equal to zero
-                        ; if compare was equal to 16, keep going down
+;   LDY #$00
+; .loadSpritesButtons:
+;   LDA [levelSprites], y
+;   STA $0230, Y
+;   INY
+;   CPY spritesAmount
+;   BNE .loadSpritesButtons
 
 LoadBackground:
   LDA $2002             ; read PPU status to reset the high/low latch
@@ -1673,19 +1727,19 @@ LoadBRLoop:
   STA brOneCoorX
   LDA brCurrentCoorY
   STA brOneCoorY
-  LDA brsAmount
-  CMP #$02
-  BEQ LoadBRLoop
-  JMP LoadBRDone
+  ; LDA brsAmount
+  ; CMP #$02
+  ; BEQ LoadBRLoop
+  ; JMP LoadBRDone
 AssignBRTwo:
-  LDA brCurrentPosX
-  STA brTwoPosX
-  LDA brCurrentPosY
-  STA brTwoPosY
-  LDA brCurrentCoorX
-  STA brTwoCoorX
-  LDA brCurrentCoorY
-  STA brTwoCoorY
+  ; LDA brCurrentPosX
+  ; STA brTwoPosX
+  ; LDA brCurrentPosY
+  ; STA brTwoPosY
+  ; LDA brCurrentCoorX
+  ; STA brTwoCoorX
+  ; LDA brCurrentCoorY
+  ; STA brTwoCoorY
 LoadBRDone:
   RTS
 
@@ -1802,124 +1856,100 @@ Result:
  STA rootResult ;result 
  RTS
 ;;;;;;;;;;;;;;  
-TimeWait:
-  LDA timerOn
-  CMP #$01
-  BEQ TimeWaitDone
-  LDA #$01
-  STA timerOn
-  LDA	#10
-	STA	wcount
-bw1:
-  JSR	delay
-	DEC	wcount
-	BNE	bw1
-	JMP Forever ; jump to forever to wait for NMI for good rendering
+; TimeWait:
+;   LDA timerOn
+;   CMP #$01
+;   BEQ TimeWaitDone
+;   LDA #$01
+;   STA timerOn
+;   LDA	#10
+; 	STA	wcount
+; bw1:
+;   JSR	delay
+; 	DEC	wcount
+; 	BNE	bw1
+; 	JMP Forever ; jump to forever to wait for NMI for good rendering
 
-delay:
-	LDY	#255		;about 0.16s @ 2MHz 
-dloop2:
-	LDX	#255
-dloop1:
-	DEX
-	BNE	dloop1
-	DEY
-	BNE	dloop2
-TimeWaitDone:
-	RTS
+; delay:
+; 	LDY	#255		;about 0.16s @ 2MHz 
+; dloop2:
+; 	LDX	#255
+; dloop1:
+; 	DEX
+; 	BNE	dloop1
+; 	DEY
+; 	BNE	dloop2
+; TimeWaitDone:
+; 	RTS
 ;;;;;; level sprites data
 spritesTotalPerLvl: ;value multiplied by four because of attributes
-  .db $50, $70, $50, $50, $50, $50
+  .db $40, $40, $40, $40, $40, $40
 
-spritesLvl1:
-     ;vert tile attr horiz
-  .db $80, $50, $03, $80
-  .db $80, $51, $03, $88
-  .db $88, $60, $03, $80
-  .db $88, $61, $03, $88
-  .db $90, $70, $03, $80
-  .db $90, $71, $03, $88
-  ; .db $63, $40, $00, $6C   ;BR 1
-  ;BR 1 full body
-  .db $73, $52, $02, $64
-  .db $73, $53, $02, $6C
-  .db $6B, $62, $02, $64
-  .db $6B, $63, $02, $6C
-  .db $63, $72, $02, $64
-  .db $63, $73, $02, $6C
-  ;.db $63, $40, $00, $6C   ;BR 2
-  ;.db $63, $41, $03, $6C   ; exit
-  .db $5F, $04, $01, $62
-  .db $5F, $05, $01, $6A
-  .db $5F, $06, $01, $72
-  .db $5F, $07, $01, $7A
-  .db $67, $14, $01, $62
-  .db $67, $15, $01, $6A
-  .db $67, $16, $01, $72
-  .db $67, $17, $01, $7A
+; spritesLvl1:
+;      ;vert tile attr horiz
+;   .db $80, $50, $03, $80
+;   .db $80, $51, $03, $88
+;   .db $88, $60, $03, $80
+;   .db $88, $61, $03, $88
+;   .db $90, $70, $03, $80
+;   .db $90, $71, $03, $88
+;   ; .db $63, $40, $00, $6C   ;BR 1
+;   ;BR 1 full body
+;   .db $73, $52, $02, $64
+;   .db $73, $53, $02, $6C
+;   .db $6B, $62, $02, $64
+;   .db $6B, $63, $02, $6C
+;   .db $63, $72, $02, $64
+;   .db $63, $73, $02, $6C
+;   ;.db $63, $40, $00, $6C   ;BR 2
+;   ;.db $63, $41, $03, $6C   ; exit
+;   .db $5F, $04, $01, $62
+;   .db $5F, $05, $01, $6A
+;   .db $5F, $06, $01, $72
+;   .db $5F, $07, $01, $7A
+;   .db $67, $14, $01, $62
+;   .db $67, $15, $01, $6A
+;   .db $67, $16, $01, $72
+;   .db $67, $17, $01, $7A
   ; .db $83, $41, $00, $6C   ;sprite 1
   ; .db $73, $41, $00, $8C   ;sprite 1
   ; .db $8B, $41, $00, $9C   ;sprite 1
 
-spritesLvl2:
-     ;vert tile attr horiz
-  .db $80, $50, $03, $80
-  .db $80, $51, $03, $88
-  .db $88, $60, $03, $80
-  .db $88, $61, $03, $88
-  .db $90, $70, $03, $80
-  .db $90, $71, $03, $88
-  ;BR 1 full body
-  .db $73, $52, $02, $64
-  .db $73, $53, $02, $6C
-  .db $6B, $62, $02, $64
-  .db $6B, $63, $02, $6C
-  .db $63, $72, $02, $64
-  .db $63, $73, $02, $6C
-  ; .db $83, $41, $00, $6C   ;sprite 1
-  ; .db $8B, $41, $00, $9C   ;sprite 1
-  .db $67, $04, $01, $92 ; exit
-  .db $67, $05, $01, $9A
-  .db $67, $06, $01, $A2
-  .db $67, $07, $01, $AA
-  .db $6F, $14, $01, $92
-  .db $6F, $15, $01, $9A
-  .db $6F, $16, $01, $A2
-  .db $6F, $17, $01, $AA
-  ; .db $98, $20, $01, $32 ; pause btn
-  ; .db $98, $21, $01, $3A
-  ; .db $98, $22, $01, $42
-  ; .db $98, $23, $01, $4A
-  ; .db $A0, $30, $01, $32
-  ; .db $A0, $31, $01, $3A
-  ; .db $A0, $32, $01, $42
-  ; .db $A0, $33, $01, $4A
+; spritesCharacters:
+;      ;vert tile attr horiz
+;   ;player
+;   .db $80, $50, $03, $80
+;   .db $80, $51, $03, $88
+;   .db $88, $60, $03, $80
+;   .db $88, $61, $03, $88
+;   .db $90, $70, $03, $80
+;   .db $90, $71, $03, $88
+;   ;BR 1 full body
+;   .db $73, $52, $02, $64
+;   .db $73, $53, $02, $6C
+;   .db $6B, $62, $02, $64
+;   .db $6B, $63, $02, $6C
+;   .db $63, $72, $02, $64
+;   .db $63, $73, $02, $6C
 
-spritesPointers:
-  .dw spritesLvl2
-  .dw spritesLvl2
-  .dw spritesLvl2
-  .dw spritesLvl2
-  .dw spritesLvl2
-  .dw spritesLvl2
 
-spritesButtonsLvl6:
-  .db $98, $20, $01, $32 ; pause btn
-  .db $98, $21, $01, $3A
-  .db $98, $22, $01, $42
-  .db $98, $23, $01, $4A
-  .db $A0, $30, $01, $32
-  .db $A0, $31, $01, $3A
-  .db $A0, $32, $01, $42
-  .db $A0, $33, $01, $4A
+; spritesButtonsLvl6:
+;   .db $98, $20, $01, $32 ; pause btn
+;   .db $98, $21, $01, $3A
+;   .db $98, $22, $01, $42
+;   .db $98, $23, $01, $4A
+;   .db $A0, $30, $01, $32
+;   .db $A0, $31, $01, $3A
+;   .db $A0, $32, $01, $42
+;   .db $A0, $33, $01, $4A
   
-spriteButtons:
-  .dw spritesButtonsLvl6
-  .dw spritesButtonsLvl6
-  .dw spritesButtonsLvl6
-  .dw spritesButtonsLvl6
-  .dw spritesButtonsLvl6
-  .dw spritesButtonsLvl6
+; spriteButtons:
+;   .dw spritesButtonsLvl6
+;   .dw spritesButtonsLvl6
+;   .dw spritesButtonsLvl6
+;   .dw spritesButtonsLvl6
+;   .dw spritesButtonsLvl6
+;   .dw spritesButtonsLvl6
 ;;;;;;;;;;;;;;; TEXTS ;;;;;;;;;;;;;;;;;;
 firstText:
   .db $24, $0D, $1E, $1B, $12, $17, $10, $24, $1D, $11, $0E, $24, $08, $00, $1C, $2D, $24, $1D, $11, $0E
@@ -2081,14 +2111,67 @@ lastText:
   .db $0D, $24, $1D, $11, $0E, $24, $0B, $15, $0A, $0D, $0E, $24, $1B, $0E, $20, $12, $17, $0D, $0E, $1B
   .db $1C, $2B
 
+spritesLvl4:
+  .db $67, $04, $01, $92 ; exit
+  .db $67, $05, $01, $9A
+  .db $67, $06, $01, $A2
+  .db $67, $07, $01, $AA
+  .db $6F, $14, $01, $92
+  .db $6F, $15, $01, $9A
+  .db $6F, $16, $01, $A2
+  .db $6F, $17, $01, $AA
+  .db $98, $20, $01, $32 ; pause btn
+  .db $98, $21, $01, $3A
+  .db $98, $22, $01, $42
+  .db $98, $23, $01, $4A
+  .db $A0, $30, $01, $32
+  .db $A0, $31, $01, $3A
+  .db $A0, $32, $01, $42
+  .db $A0, $33, $01, $4A
+
+spritesLvl2:
+  .db $67, $04, $01, $92 ; exit
+  .db $67, $05, $01, $9A
+  .db $67, $06, $01, $A2
+  .db $67, $07, $01, $AA
+  .db $6F, $14, $01, $92
+  .db $6F, $15, $01, $9A
+  .db $6F, $16, $01, $A2
+  .db $6F, $17, $01, $AA
+  .db $98, $20, $01, $32 ; pause btn
+  .db $98, $21, $01, $3A
+  .db $98, $22, $01, $42
+  .db $98, $23, $01, $4A
+  .db $A0, $30, $01, $32
+  .db $A0, $31, $01, $3A
+  .db $A0, $32, $01, $42
+  .db $A0, $33, $01, $4A
+
 ;;;;;;;;;;;;;
 
   ; bglvl07:
   ; incbin "bladerewindertest.nam"
-  
-  .bank 1
-  .org $E000
+  ; third 8k PRG bank
+  .bank 2
+  .org $C000
 
+spritesLvl6:
+  .db $67, $04, $01, $92 ; exit
+  .db $67, $05, $01, $9A
+  .db $67, $06, $01, $A2
+  .db $67, $07, $01, $AA
+  .db $6F, $14, $01, $92
+  .db $6F, $15, $01, $9A
+  .db $6F, $16, $01, $A2
+  .db $6F, $17, $01, $AA
+  .db $98, $20, $01, $32 ; pause btn
+  .db $98, $21, $01, $3A
+  .db $98, $22, $01, $42
+  .db $98, $23, $01, $4A
+  .db $A0, $30, $01, $32
+  .db $A0, $31, $01, $3A
+  .db $A0, $32, $01, $42
+  .db $A0, $33, $01, $4A
 ; spritesButtonsLvl6:
 ;   .db $98, $20, $01, $32 ; pause btn
 ;   .db $98, $21, $01, $3A
@@ -2858,10 +2941,171 @@ initialScreenPointers:
   ; .dw intro1
   .dw titleScreen
   .dw titleScreen
-  .dw titleScreen
+  ; .dw titleScreen
 
 ; introTextPointers:
 ;   .dw intro1
+;-- fourth bank
+  .bank 3
+  .org $E000
+
+
+spritesLvl22:
+     ;vert tile attr horiz
+  ; .db $80, $50, $03, $80
+  ; .db $80, $51, $03, $88
+  ; .db $88, $60, $03, $80
+  ; .db $88, $61, $03, $88
+  ; .db $90, $70, $03, $80
+  ; .db $90, $71, $03, $88
+  ; ;BR 1 full body
+  ; .db $73, $52, $02, $64
+  ; .db $73, $53, $02, $6C
+  ; .db $6B, $62, $02, $64
+  ; .db $6B, $63, $02, $6C
+  ; .db $63, $72, $02, $64
+  ; .db $63, $73, $02, $6C
+  ; .db $83, $41, $00, $6C   ;sprite 1
+  ; .db $8B, $41, $00, $9C   ;sprite 1
+  .db $67, $04, $01, $92 ; exit
+  .db $67, $05, $01, $9A
+  .db $67, $06, $01, $A2
+  .db $67, $07, $01, $AA
+  .db $6F, $14, $01, $92
+  .db $6F, $15, $01, $9A
+  .db $6F, $16, $01, $A2
+  .db $6F, $17, $01, $AA
+  .db $98, $20, $01, $32 ; pause btn
+  .db $98, $21, $01, $3A
+  .db $98, $22, $01, $42
+  .db $98, $23, $01, $4A
+  .db $A0, $30, $01, $32
+  .db $A0, $31, $01, $3A
+  .db $A0, $32, $01, $42
+  .db $A0, $33, $01, $4A
+
+spritesCharacters:
+     ;vert tile attr horiz
+  ;player
+  .db $80, $50, $03, $80
+  .db $80, $51, $03, $88
+  .db $88, $60, $03, $80
+  .db $88, $61, $03, $88
+  .db $90, $70, $03, $80
+  .db $90, $71, $03, $88
+  ;BR 1 full body
+  .db $73, $52, $02, $64
+  .db $73, $53, $02, $6C
+  .db $6B, $62, $02, $64
+  .db $6B, $63, $02, $6C
+  .db $63, $72, $02, $64
+  .db $63, $73, $02, $6C
+
+spritesLvl3:
+  .db $67, $04, $01, $92 ; exit
+  .db $67, $05, $01, $9A
+  .db $67, $06, $01, $A2
+  .db $67, $07, $01, $AA
+  .db $6F, $14, $01, $92
+  .db $6F, $15, $01, $9A
+  .db $6F, $16, $01, $A2
+  .db $6F, $17, $01, $AA
+  .db $98, $20, $01, $32 ; pause btn
+  .db $98, $21, $01, $3A
+  .db $98, $22, $01, $42
+  .db $98, $23, $01, $4A
+  .db $A0, $30, $01, $32
+  .db $A0, $31, $01, $3A
+  .db $A0, $32, $01, $42
+  .db $A0, $33, $01, $4A
+
+spritesLvl0:
+  .db $67, $04, $01, $92 ; exit
+  .db $67, $05, $01, $9A
+  .db $67, $06, $01, $A2
+  .db $67, $07, $01, $AA
+  .db $6F, $14, $01, $92
+  .db $6F, $15, $01, $9A
+  .db $6F, $16, $01, $A2
+  .db $6F, $17, $01, $AA
+  .db $98, $20, $01, $32 ; pause btn
+  .db $98, $21, $01, $3A
+  .db $98, $22, $01, $42
+  .db $98, $23, $01, $4A
+  .db $A0, $30, $01, $32
+  .db $A0, $31, $01, $3A
+  .db $A0, $32, $01, $42
+  .db $A0, $33, $01, $4A
+
+spritesLvl01:
+  .db $67, $04, $01, $92 ; exit
+  .db $67, $05, $01, $9A
+  .db $67, $06, $01, $A2
+  .db $67, $07, $01, $AA
+  .db $6F, $14, $01, $92
+  .db $6F, $15, $01, $9A
+  .db $6F, $16, $01, $A2
+  .db $6F, $17, $01, $AA
+  .db $98, $20, $01, $32 ; pause btn
+  .db $98, $21, $01, $3A
+  .db $98, $22, $01, $42
+  .db $98, $23, $01, $4A
+  .db $A0, $30, $01, $32
+  .db $A0, $31, $01, $3A
+  .db $A0, $32, $01, $42
+  .db $A0, $33, $01, $4A
+
+spritesLvl5:
+  .db $67, $04, $01, $92 ; exit
+  .db $67, $05, $01, $9A
+  .db $67, $06, $01, $A2
+  .db $67, $07, $01, $AA
+  .db $6F, $14, $01, $92
+  .db $6F, $15, $01, $9A
+  .db $6F, $16, $01, $A2
+  .db $6F, $17, $01, $AA
+  .db $98, $20, $01, $32 ; pause btn
+  .db $98, $21, $01, $3A
+  .db $98, $22, $01, $42
+  .db $98, $23, $01, $4A
+  .db $A0, $30, $01, $32
+  .db $A0, $31, $01, $3A
+  .db $A0, $32, $01, $42
+  .db $A0, $33, $01, $4A
+
+spritesLvl1:
+  .db $67, $04, $01, $92 ; exit
+  .db $67, $05, $01, $9A
+  .db $67, $06, $01, $A2
+  .db $67, $07, $01, $AA
+  .db $6F, $14, $01, $92
+  .db $6F, $15, $01, $9A
+  .db $6F, $16, $01, $A2
+  .db $6F, $17, $01, $AA
+  .db $98, $20, $01, $32 ; pause btn
+  .db $98, $21, $01, $3A
+  .db $98, $22, $01, $42
+  .db $98, $23, $01, $4A
+  .db $A0, $30, $01, $32
+  .db $A0, $31, $01, $3A
+  .db $A0, $32, $01, $42
+  .db $A0, $33, $01, $4A
+
+; spritesPointersTwo:
+;   .dw spritesLvl4
+;   .dw spritesLvl5
+;   .dw spritesLvl6
+
+; spritesPointers:
+;   .dw spritesLvl1
+;   .dw spritesLvl2
+;   .dw spritesLvl3
+;   .dw spritesLvl4
+;   .dw spritesLvl5
+;   .dw spritesLvl6
+;   .dw spritesLvl6
+;   .dw spritesLvl6
+
 
 bgLevelsPointers:
   .dw bglvl01
@@ -2948,10 +3192,10 @@ buttonsPositions:
   
 ;;;;;;;;;;;;;;  
   
-  .bank 3
+  .bank 4
   .org $0000
   .incbin "mario.chr"
   
-  .bank 2
+  .bank 5
   .org $0000
   .incbin "bladerewinderV2.chr"   ;includes 8KB graphics file from SMB1
