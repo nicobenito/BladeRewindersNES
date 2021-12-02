@@ -2687,7 +2687,7 @@ Bankvalues:
 ;   incbin "logoscreen1.nam"
 
 titleScreen:
-  incbin "titlescreen1.nam"
+  incbin "titlescreen2.nam"
 
 ; intro1:
 ;   incbin "intro1.nam"
@@ -2711,7 +2711,7 @@ bglvl06:
   incbin "bladerewindertest.nam"
 
 palette:
-  .db $0F,$29,$01,$25,  $0F,$36,$17,$0F,  $0F,$05,$16,$26,  $0F,$20,$00,$0F   ;;background palette
+  .db $0F,$29,$01,$25,  $0F,$24,$17,$0F,  $0F,$05,$16,$26,  $0F,$20,$00,$0F   ;;background palette
   .db $0F,$13,$23,$33,  $0F,$20,$10,$24,  $0F,$1C,$37,$16,  $0F,$1C,$37,$23   ;;sprite palette
 
 ; spritesLvl1:
@@ -3243,7 +3243,7 @@ buttonsPositions:
 
   .bank 4
   .org $0000
-  .incbin "mario.chr"
+  .incbin "bladerewindertitle.chr"
 
   .bank 5
   .org $0000
