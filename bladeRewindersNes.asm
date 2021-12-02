@@ -2,13 +2,13 @@
   .ineschr 2   ; 1x  8KB CHR data
   .inesmap 3   ; mapper 0 = NROM, no bank swapping
   .inesmir 1   ; background mirroring
-  
+
 
 ;;;;;;;;;;;;;;;
 
 ;; DECLARE SOME VARIABLES HERE
   .rsset $0000  ;;start variables at ram location 0
-  
+
 pointerLo  .rs 1   ; pointer variables are declared in RAM
 pointerHi  .rs 1   ; low byte first, high byte immediately after
 gamestate  .rs 1  ; .rs 1 means reserve one byte of space
@@ -90,7 +90,7 @@ hasRewinded .rs 1
 playerHasMove .rs 1
 wcount .rs 1
 initialBGNumber .rs 1 ; initial/other screens number
-timerOn .rs 1; nes waiting test 
+timerOn .rs 1; nes waiting test
 timerIsRunning .rs 1
 charPosX .rs 1
 charPosY .rs 1
@@ -187,12 +187,30 @@ LAST_LEVEL = $06
 
 
   ; .bank 0
-  ; .org $C000 
+  ; .org $C000
 ;----- first 8k bank of PRG-ROM
   .bank 0
   .org $8000  ;we have two 16k PRG banks now.  We will stick our sound engine in the first one, which starts at $8000.
-  
+
   .include "sound_engine.asm"
+
+  spritesLvl3:
+  .db $7F, $04, $01, $82 ; exit
+  .db $7F, $05, $01, $8A
+  .db $7F, $06, $01, $92
+  .db $7F, $07, $01, $9A
+  .db $87, $14, $01, $82
+  .db $87, $15, $01, $8A
+  .db $87, $16, $01, $92
+  .db $87, $17, $01, $9A
+  .db $90, $00, $01, $22 ; rewind btn
+  .db $90, $01, $01, $2A
+  .db $90, $02, $01, $32
+  .db $90, $03, $01, $3A
+  .db $98, $10, $01, $22
+  .db $98, $11, $01, $2A
+  .db $98, $12, $01, $32
+  .db $98, $13, $01, $3A
 
 ;----- second 8k bank of PRG-ROM
   .bank 1
@@ -227,14 +245,14 @@ clrmem:
   STA $0200, x
   INX
   BNE clrmem
-   
+
 vblankwait2:      ; Second wait for vblank, PPU is ready after this
   BIT $2002
   BPL vblankwait2
 
 ;Enable sound channels
   jsr sound_init
-  
+
   lda #$01
   sta current_song
 
@@ -261,7 +279,7 @@ LoadPalettesLoop:
   BNE LoadPalettesLoop  ; Branch to LoadPalettesLoop if compare was Not Equal to zero
                         ; if compare was equal to 32, keep going down
 
-  LDA #$00 ;lvl number - 1
+  LDA #$04 ;lvl number - 1
   STA levelNumber
   LDA #$00
   STA letterCursor
@@ -274,15 +292,15 @@ LoadPalettesLoop:
 
   ;deactive intial screens
   ;JSR LoadLevel
-  
+
   ; LOADING TITLE SCREEN
   LDA #$00
   STA initialBGNumber
   JSR LoadBlackScreen
-  
+
   ; set screen player position
   LDA #$A3
-  STA posy  
+  STA posy
   LDA #$68
   STA posx
 
@@ -310,7 +328,7 @@ LoadPalettesLoop:
   STA gamestate
 
 
-              
+
   LDA #%10010000   ; enable NMI, sprites from Pattern Table 0, background from Pattern Table 1
   STA $2000
 
@@ -319,8 +337,8 @@ LoadPalettesLoop:
 
 Forever:
   JMP Forever     ;jump back to Forever, infinite loop, waiting for NMI
-  
- 
+
+
 
 NMI:
   LDA #$00
@@ -339,15 +357,15 @@ NMI:
   LDA #$00        ;;tell the ppu there is no background scrolling
   STA $2005
   STA $2005
-    
+
   ;;;all graphics updates done by here, run game engine
-  jsr sound_play_frame    ;run our sound engine after all drawing code is done. 
+  jsr sound_play_frame    ;run our sound engine after all drawing code is done.
                             ;this ensures our sound engine gets run once per frame.
 
   JSR ReadController1  ;;get the current button data for player 1
   ; JSR ReadController2  ;;get the current button data for player 2
-  
-GameEngine:  
+
+GameEngine:
   LDA gamestate
   CMP #STATELOGO
   BEQ EngineLogo    ;;game is displaying logo screen
@@ -355,7 +373,7 @@ GameEngine:
   LDA gamestate
   CMP #STATETITLE
   BEQ EngineTitle    ;;game is displaying title screen
-    
+
   LDA gamestate
   CMP #STATEPLAYING
   BNE .gameEngineContinue   ;;game is playing
@@ -365,13 +383,13 @@ GameEngine:
   CMP #STATEGAMEOVER
   BNE .gameEngineContinue
   JMP EngineGameOver  ;;game is displaying ending screen
-  
+
 .gameEngineContinue
   LDA gamestate
   CMP #STATEINTRO
   BEQ EngineIntro
-GameEngineDone:  
-  
+GameEngineDone:
+
   JSR UpdateSprites
 
   RTI             ; return from interrupt
@@ -448,16 +466,16 @@ ReadStartBtn:
   JSR sound_load
 ReadStartBtnDone:
   JMP GameEngineDone
-;;;;;;;;; 
- 
+;;;;;;;;;
+
 EngineGameOver:
   ;;if start button pressed
   ;;  turn screen off
   ;;  load title screen
   ;;  go to Title State
-  ;;  turn screen on 
+  ;;  turn screen on
   JMP GameEngineDone
- 
+
 ;;;;;;;;;;;
 
 EngineIntro:
@@ -513,7 +531,7 @@ EngineIntro:
   BEQ ReadIntroStartBtn
   JSR LoadBlackScreen
 ReadIntroStartBtn:
-  LDA #$00 
+  LDA #$00
   JSR sound_load
   LDA buttons1
   AND #%00010000
@@ -566,12 +584,12 @@ ReadLeftBtn:
   LDA buttons1
   STA buttons1pre
   LDA posx
-  SEC             
+  SEC
   SBC #PLAYERHMOV
   STA posx
   CLC
   LDA posy
-  SEC             
+  SEC
   SBC #PLAYERYMOV
   STA posy
   CLC
@@ -660,7 +678,7 @@ ReadDownBtn:
   STA posy
   LDA posx
   CLC
-  SEC             
+  SEC
   SBC #PLAYERHMOV
   STA posx
   LDA playerCoorY
@@ -699,7 +717,7 @@ ReadUpBtn:
   LDA buttons1
   STA buttons1pre
   LDA posy
-  SEC             
+  SEC
   SBC #PLAYERYMOV
   STA posy
   LDA posx
@@ -797,12 +815,12 @@ UpdateSprites:
   ; LDA #HIGH(BRTWOY)
   ; STA charSpriteY+1
   ; JSR UpdateCharactersSprites
-UpdateSpritesDone:  
+UpdateSpritesDone:
   RTS
 
 UpdateCharactersSprites:
   LDY #$00
-  LDA charPosX 
+  LDA charPosX
   STA [charSpriteX], Y
   LDY #$08
   STA [charSpriteX], Y
@@ -919,7 +937,7 @@ CheckNextPosition:
   LDA #$01
   STA canMove
   LDX #$00
-  LDY #$00  
+  LDY #$00
 BlockLoop:
   INX
   LDA [levelBlocks], Y
@@ -983,7 +1001,7 @@ CheckButtonsLoop:
   ; if 1 is paused
   ; if is player, do nothing
   ; set current Paused
-  INY 
+  INY
   LDA [levelButtons], Y
   CMP #PAUSEDBTN
   BNE CheckRewindBtn
@@ -1270,7 +1288,7 @@ MoveBRUp:
   SBC #PLAYERYMOV
   STA brCurrentPosY
   LDA brCurrentPosX
-  CLC       
+  CLC
   ADC #PLAYERHMOV
   STA brCurrentPosX
   LDA brCurrentCoorY
@@ -1284,7 +1302,7 @@ MoveBRLeft:
   SBC #PLAYERHMOV
   STA brCurrentPosX
   LDA brCurrentPosY
-  SEC      
+  SEC
   SBC #PLAYERYMOV
   STA brCurrentPosY
   LDA brCurrentCoorX
@@ -1298,7 +1316,7 @@ MoveBRDown:
   ADC #PLAYERYMOV
   STA brCurrentPosY
   LDA brCurrentPosX
-  SEC      
+  SEC
   SBC #PLAYERHMOV
   STA brCurrentPosX
   LDA brCurrentCoorY
@@ -1311,8 +1329,8 @@ MoveBRRight:
   CLC
   ADC #PLAYERHMOV
   STA brCurrentPosX
-  LDA brCurrentPosY   
-  CLC       
+  LDA brCurrentPosY
+  CLC
   ADC #PLAYERYMOV
   STA brCurrentPosY
   LDA brCurrentCoorX
@@ -1437,7 +1455,7 @@ DistanceMultiplication:
   BNE MultLoop
   STA multTempResult
   RTS
- 
+
 CheckIfExit:
   LDA #$00
   STA playerHasWon
@@ -1498,7 +1516,7 @@ LoadNxtLevel:
   CLC
   ADC #$01
   STA levelNumber
-  ;JSR CheckDialogue
+  JSR CheckDialogue
 ResetLevel:
   ; check if game is done, if it is, jmp to reset? or go to reset routine.
   LDA levelNumber
@@ -1515,7 +1533,7 @@ ResetLevel:
   ; STA playerCoorX
   ; STA playerCoorY
   ; LDA #$A3
-  ; STA posy  
+  ; STA posy
   ; LDA #$68
   ; STA posx
   JSR SetPlayerInitialPos
@@ -1552,7 +1570,7 @@ ReadController1Loop:
   DEX
   BNE ReadController1Loop
   RTS
-  
+
 ; ReadController2:
 ;   LDA #$01
 ;   STA $4016
@@ -1565,7 +1583,7 @@ ReadController1Loop:
 ;   ROL buttons2     ; bit0 <- Carry
 ;   DEX
 ;   BNE ReadController2Loop
-;   RTS  
+;   RTS
 
 LoadLevel:
   lda levelNumber ;gets the number of the current level
@@ -1577,41 +1595,56 @@ LoadLevel:
   LDA levelNumber
   CMP #$00
   BEQ .setOne
-.setOne
-  lda spritesLvl1+0 ;copies the low byte to ZP
+  LDA levelNumber
+  CMP #$01
+  BEQ .setTwo
+  LDA levelNumber
+  CMP #$02
+  BEQ .setThree
+  LDA levelNumber
+  CMP #$03
+  BEQ .setFour
+  LDA levelNumber
+  CMP #$04
+  BEQ .setFive
+  LDA levelNumber
+  CMP #$05
+  BEQ .setSix
+.setOne:
+  lda #LOW(spritesLvl1) ;copies the low byte to ZP
 	sta levelSprites+0
-	lda spritesLvl1+1;copies the high byte to ZP
+	lda #HIGH(spritesLvl1);copies the high byte to ZP
 	sta levelSprites+1
   jmp .continue
-.setTwo
-  lda spritesLvl2+0 ;copies the low byte to ZP
+.setTwo:
+  lda #LOW(spritesLvl2) ;copies the low byte to ZP
 	sta levelSprites+0
-	lda spritesLvl2+1;copies the high byte to ZP
+	lda #HIGH(spritesLvl2);copies the high byte to ZP
 	sta levelSprites+1
   jmp .continue
-.setThree
-  lda spritesLvl3+0 ;copies the low byte to ZP
+.setThree:
+  lda #LOW(spritesLvl3) ;copies the low byte to ZP
 	sta levelSprites+0
-	lda spritesLvl3+1;copies the high byte to ZP
+	lda #HIGH(spritesLvl3);copies the high byte to ZP
 	sta levelSprites+1
   jmp .continue
-.setFour
-  lda spritesLvl4+0 ;copies the low byte to ZP
+.setFour:
+  lda #LOW(spritesLvl4) ;copies the low byte to ZP
 	sta levelSprites+0
-	lda spritesLvl4+1;copies the high byte to ZP
+	lda #HIGH(spritesLvl4);copies the high byte to ZP
 	sta levelSprites+1
   jmp .continue
-.setFive
-  lda spritesLvl5+0 ;copies the low byte to ZP
+.setFive:
+  lda #LOW(spritesLvl5) ;copies the low byte to ZP
 	sta levelSprites+0
-	lda spritesLvl5+1;copies the high byte to ZP
+	lda #HIGH(spritesLvl5);copies the high byte to ZP
 	sta levelSprites+1
   jmp .continue
-.setSix
-  lda spritesLvl6+0 ;copies the low byte to ZP
+.setSix:
+  lda #LOW(spritesLvl6) ;copies the low byte to ZP
 	sta levelSprites+0
-	lda spritesLvl6+1;copies the high byte to ZP
-	sta levelSprites+1	
+	lda #HIGH(spritesLvl6);copies the high byte to ZP
+	sta levelSprites+1
   jmp .continue
   ; lda spritesPointers+0, x ;copies the low byte to ZP
 	; sta levelSprites+0
@@ -1623,7 +1656,7 @@ LoadLevel:
 ; 	sta levelSprites+0
 ; 	lda spritesPointersTwo+1, x ;copies the high byte to ZP
 ; 	sta levelSprites+1
-.continue
+.continue:
   LDY levelNumber
   LDA spritesTotalPerLvl, y
   STA spritesAmount
@@ -1662,13 +1695,13 @@ LoadSpritesLoop:
   INY                   ; X = X + 1
   CPY #$30     ; Compare X to hex $10, decimal
   BNE LoadSpritesLoop   ; Branch to LoadSpritesLoop if compare was Not Equal to zero
-;   LDY #$00
-; .loadSpritesButtons:
-;   LDA [levelSprites], y
-;   STA $0230, Y
-;   INY
-;   CPY spritesAmount
-;   BNE .loadSpritesButtons
+  LDY #$00
+.loadSpritesButtons:
+  LDA [levelSprites], y
+  STA $0230, Y
+  INY
+  CPY spritesAmount
+  BNE .loadSpritesButtons
 
 LoadBackground:
   LDA $2002             ; read PPU status to reset the high/low latch
@@ -1683,21 +1716,21 @@ LoadBackground:
   ;LDA #HIGH(levelBackground)
   LDA levelBackground+1
   STA pointerHi       ; put the high byte of the address into pointer
-  
+
   LDX #$00            ; start at pointer + 0
   LDY #$00
 OutsideLoop:
-  
+
 InsideLoop:
   LDA [pointerLo], y  ; copy one background byte from address in pointer plus Y
   STA $2007           ; this runs 256 * 4 times
-  
+
   INY                 ; inside loop counter
   CPY #$00
   BNE InsideLoop      ; run the inside loop 256 times before continuing down
-  
+
   INC pointerHi       ; low byte went 0 to 256, so high byte needs to be changed now
-  
+
   INX
   CPX #$04
   BNE OutsideLoop     ; run the outside loop 256 times before continuing down
@@ -1768,21 +1801,21 @@ LoadInitialBackground:
   ;LDA #HIGH(levelBackground)
   LDA levelBackground+1
   STA pointerHi       ; put the high byte of the address into pointer
-  
+
   LDX #$00            ; start at pointer + 0
   LDY #$00
 InitialOutsideLoop:
-  
+
 InitialInsideLoop:
   LDA [pointerLo], y  ; copy one background byte from address in pointer plus Y
   STA $2007           ; this runs 256 * 4 times
-  
+
   INY                 ; inside loop counter
   CPY #$00
   BNE InitialInsideLoop      ; run the inside loop 256 times before continuing down
-  
+
   INC pointerHi       ; low byte went 0 to 256, so high byte needs to be changed now
-  
+
   INX
   CPX #$04
   BNE InitialOutsideLoop     ; run the outside loop 256 times before continuing down
@@ -1795,22 +1828,22 @@ InitialInsideLoop:
 ;   STA $2006             ; write the high byte of $2000 address
 ;   LDA #$00
 ;   STA $2006             ; write the low byte of $2000 address
-  
+
 ;   LDX #$00            ; start at pointer + 0
 ;   LDY #$00
 ; .initialOutsideLoop:
-  
+
 ; .initialInsideLoop:
 ;   LDA #$24  ; copy one background byte from address in pointer plus Y
 ;   STA $2007           ; this runs 256 * 4 times
-  
+
 ;   INY                 ; inside loop counter
 ;   CPY #$00
-;   BNE .initialInsideLoop      ; run the inside loop 256 times before continuing down  
+;   BNE .initialInsideLoop      ; run the inside loop 256 times before continuing down
 ;   INX
 ;   CPX #$04
 ;   BNE .initialOutsideLoop     ; run the outside loop 256 times before continuing down
-  
+
 ;   ;; write attributes, in this case black and white (3rd palette)
 ;   LDA $2002             ; read PPU status to reset the high/low latch
 ;   LDA #$23
@@ -1835,7 +1868,7 @@ SQRCalculation:
  STA rootRegisterD ;D
  STA rootRegisterE ;E
  LDA numberToRoot
-SQRLoop: 
+SQRLoop:
  SEC
  SBC rootRegisterD
  CMP #$00
@@ -1849,7 +1882,7 @@ SQRLoop:
  LDX rootRegisterE
  INX
  STX rootRegisterE
- JMP SQRLoop 	
+ JMP SQRLoop
 Result:
  STA rootRemanent ; remanent
  LDA rootRegisterE
@@ -1857,9 +1890,9 @@ Result:
  ASL A
  CLC
  ADC rootRemanent
- STA rootResult ;result 
+ STA rootResult ;result
  RTS
-;;;;;;;;;;;;;;  
+;;;;;;;;;;;;;;
 ; TimeWait:
 ;   LDA timerOn
 ;   CMP #$01
@@ -1875,7 +1908,7 @@ Result:
 ; 	JMP Forever ; jump to forever to wait for NMI for good rendering
 
 ; delay:
-; 	LDY	#255		;about 0.16s @ 2MHz 
+; 	LDY	#255		;about 0.16s @ 2MHz
 ; dloop2:
 ; 	LDX	#255
 ; dloop1:
@@ -1887,7 +1920,7 @@ Result:
 ; 	RTS
 ;;;;;; level sprites data
 spritesTotalPerLvl: ;value multiplied by four because of attributes
-  .db $40, $40, $40, $40, $40, $40
+  .db $40, $40, $40, $20, $40, $40
 
 ; spritesLvl1:
 ;      ;vert tile attr horiz
@@ -1946,7 +1979,7 @@ spritesTotalPerLvl: ;value multiplied by four because of attributes
 ;   .db $A0, $31, $01, $3A
 ;   .db $A0, $32, $01, $42
 ;   .db $A0, $33, $01, $4A
-  
+
 ; spriteButtons:
 ;   .dw spritesButtonsLvl6
 ;   .dw spritesButtonsLvl6
@@ -2115,7 +2148,7 @@ lastText:
   .db $0D, $24, $1D, $11, $0E, $24, $0B, $15, $0A, $0D, $0E, $24, $1B, $0E, $20, $12, $17, $0D, $0E, $1B
   .db $1C, $2B
 
-spritesLvl4:
+spritesLvl44:
   .db $67, $04, $01, $92 ; exit
   .db $67, $05, $01, $9A
   .db $67, $06, $01, $A2
@@ -2132,6 +2165,43 @@ spritesLvl4:
   .db $A0, $31, $01, $3A
   .db $A0, $32, $01, $42
   .db $A0, $33, $01, $4A
+
+spritesLvl22:
+  .db $67, $04, $01, $92 ; exit
+  .db $67, $05, $01, $9A
+  .db $67, $06, $01, $A2
+  .db $67, $07, $01, $AA
+  .db $6F, $14, $01, $92
+  .db $6F, $15, $01, $9A
+  .db $6F, $16, $01, $A2
+  .db $6F, $17, $01, $AA
+  .db $98, $20, $01, $32 ; pause btn
+  .db $98, $21, $01, $3A
+  .db $98, $22, $01, $42
+  .db $98, $23, $01, $4A
+  .db $A0, $30, $01, $32
+  .db $A0, $31, $01, $3A
+  .db $A0, $32, $01, $42
+  .db $A0, $33, $01, $4A
+
+
+spritesLvl1:
+  .db $5F, $04, $01, $62 ; exit
+  .db $5F, $05, $01, $6A
+  .db $5F, $06, $01, $72
+  .db $5F, $07, $01, $7A
+  .db $67, $14, $01, $62
+  .db $67, $15, $01, $6A
+  .db $67, $16, $01, $72
+  .db $67, $17, $01, $7A
+  .db $90, $20, $01, $62 ; pause btn
+  .db $90, $21, $01, $6A
+  .db $90, $22, $01, $72
+  .db $90, $23, $01, $7A
+  .db $98, $30, $01, $62
+  .db $98, $31, $01, $6A
+  .db $98, $32, $01, $72
+  .db $98, $33, $01, $7A
 
 spritesLvl2:
   .db $67, $04, $01, $92 ; exit
@@ -2151,6 +2221,7 @@ spritesLvl2:
   .db $A0, $32, $01, $42
   .db $A0, $33, $01, $4A
 
+
 ;;;;;;;;;;;;;
 
   ; bglvl07:
@@ -2159,23 +2230,7 @@ spritesLvl2:
   .bank 2
   .org $C000
 
-spritesLvl6:
-  .db $67, $04, $01, $92 ; exit
-  .db $67, $05, $01, $9A
-  .db $67, $06, $01, $A2
-  .db $67, $07, $01, $AA
-  .db $6F, $14, $01, $92
-  .db $6F, $15, $01, $9A
-  .db $6F, $16, $01, $A2
-  .db $6F, $17, $01, $AA
-  .db $98, $20, $01, $32 ; pause btn
-  .db $98, $21, $01, $3A
-  .db $98, $22, $01, $42
-  .db $98, $23, $01, $4A
-  .db $A0, $30, $01, $32
-  .db $A0, $31, $01, $3A
-  .db $A0, $32, $01, $42
-  .db $A0, $33, $01, $4A
+
 ; spritesButtonsLvl6:
 ;   .db $98, $20, $01, $32 ; pause btn
 ;   .db $98, $21, $01, $3A
@@ -2301,7 +2356,7 @@ BufferToPPU:
   ; JSR sound_load
 .writeContinue
   LDA letterCounter
-  CLC 
+  CLC
   ADC #$01
   STA letterCounter
   LDA letterCursor
@@ -2482,8 +2537,14 @@ CleanSprites:
 .cleanPPULoop:
   STA PLAYERY, x
   INX
-  CPX spritesAmount
+  CPX #$30
   BNE .cleanPPULoop
+  LDX #$00
+.cleanBtns:
+  STA $0230, X
+  INX
+  CPX spritesAmount
+  BNE .cleanBtns
   RTS
 
 LoadBlackScreen:
@@ -2492,22 +2553,22 @@ LoadBlackScreen:
   STA $2006             ; write the high byte of $2000 address
   LDA #$00
   STA $2006             ; write the low byte of $2000 address
-  
+
   LDX #$00            ; start at pointer + 0
   LDY #$00
 .initialOutsideLoop:
-  
+
 .initialInsideLoop:
   LDA #$24  ; copy one background byte from address in pointer plus Y
   STA $2007           ; this runs 256 * 4 times
-  
+
   INY                 ; inside loop counter
   CPY #$00
-  BNE .initialInsideLoop      ; run the inside loop 256 times before continuing down  
+  BNE .initialInsideLoop      ; run the inside loop 256 times before continuing down
   INX
   CPX #$04
   BNE .initialOutsideLoop     ; run the outside loop 256 times before continuing down
-  
+
   ;; write attributes, in this case black and white (3rd palette)
   LDA $2002             ; read PPU status to reset the high/low latch
   LDA #$23
@@ -2539,7 +2600,7 @@ DrawDialogueFace:
   CPY #$40     ; Compare X to hex $10, decimal
   BNE .loadFace
   JSR DrawDialogueLines
-  RTS 
+  RTS
 
 DrawDialogueLines:
   LDA $2002             ; read PPU status to reset the high/low latch
@@ -2785,7 +2846,7 @@ blocksLvl1:
   .db $02, $05
 
 blocksLvl2:
-  .db $03, $03  
+  .db $03, $03
   .db $02, $02
   ; .db $03, $02, $6C, $83
   .db $04, $06
@@ -2949,9 +3010,46 @@ initialScreenPointers:
 
 ; introTextPointers:
 ;   .dw intro1
+
 ;-- fourth bank
   .bank 3
   .org $E000
+
+spritesLvl45:
+  .db $67, $04, $01, $92 ; exit
+  .db $67, $05, $01, $9A
+  .db $67, $06, $01, $A2
+  .db $67, $07, $01, $AA
+  .db $6F, $14, $01, $92
+  .db $6F, $15, $01, $9A
+  .db $6F, $16, $01, $A2
+  .db $6F, $17, $01, $AA
+  .db $98, $20, $01, $32 ; pause btn
+  .db $98, $21, $01, $3A
+  .db $98, $22, $01, $42
+  .db $98, $23, $01, $4A
+  .db $A0, $30, $01, $32
+  .db $A0, $31, $01, $3A
+  .db $A0, $32, $01, $42
+  .db $A0, $33, $01, $4A
+
+spritesLvl4:
+  .db $67, $04, $01, $72 ; exit
+  .db $67, $05, $01, $7A
+  .db $67, $06, $01, $82
+  .db $67, $07, $01, $8A
+  .db $6F, $14, $01, $72
+  .db $6F, $15, $01, $7A
+  .db $6F, $16, $01, $82
+  .db $6F, $17, $01, $8A
+  .db $98, $20, $01, $32 ; pause btn
+  .db $98, $21, $01, $3A
+  .db $98, $22, $01, $42
+  .db $98, $23, $01, $4A
+  .db $A0, $30, $01, $32
+  .db $A0, $31, $01, $3A
+  .db $A0, $32, $01, $42
+  .db $A0, $33, $01, $4A
 
 spritesCharacters:
      ;vert tile attr horiz
@@ -2970,7 +3068,25 @@ spritesCharacters:
   .db $63, $72, $02, $64
   .db $63, $73, $02, $6C
 
-spritesLvl3:
+spritesLvl33:
+  .db $67, $04, $01, $92 ; exit
+  .db $67, $05, $01, $9A
+  .db $67, $06, $01, $A2
+  .db $67, $07, $01, $AA
+  .db $6F, $14, $01, $92
+  .db $6F, $15, $01, $9A
+  .db $6F, $16, $01, $A2
+  .db $6F, $17, $01, $AA
+  .db $98, $20, $01, $32 ; pause btn
+  .db $98, $21, $01, $3A
+  .db $98, $22, $01, $42
+  .db $98, $23, $01, $4A
+  .db $A0, $30, $01, $32
+  .db $A0, $31, $01, $3A
+  .db $A0, $32, $01, $42
+  .db $A0, $33, $01, $4A
+
+spritesLvl55:
   .db $67, $04, $01, $92 ; exit
   .db $67, $05, $01, $9A
   .db $67, $06, $01, $A2
@@ -2989,24 +3105,24 @@ spritesLvl3:
   .db $A0, $33, $01, $4A
 
 spritesLvl5:
-  .db $67, $04, $01, $92 ; exit
-  .db $67, $05, $01, $9A
-  .db $67, $06, $01, $A2
-  .db $67, $07, $01, $AA
-  .db $6F, $14, $01, $92
-  .db $6F, $15, $01, $9A
-  .db $6F, $16, $01, $A2
-  .db $6F, $17, $01, $AA
-  .db $98, $20, $01, $32 ; pause btn
-  .db $98, $21, $01, $3A
-  .db $98, $22, $01, $42
-  .db $98, $23, $01, $4A
-  .db $A0, $30, $01, $32
-  .db $A0, $31, $01, $3A
-  .db $A0, $32, $01, $42
-  .db $A0, $33, $01, $4A
+  .db $77, $04, $01, $B2 ; exit
+  .db $77, $05, $01, $BA
+  .db $77, $06, $01, $C2
+  .db $77, $07, $01, $CA
+  .db $7F, $14, $01, $B2
+  .db $7F, $15, $01, $BA
+  .db $7F, $16, $01, $C2
+  .db $7F, $17, $01, $CA
+  .db $88, $20, $01, $12 ; pause btn
+  .db $88, $21, $01, $1A
+  .db $88, $22, $01, $22
+  .db $88, $23, $01, $2A
+  .db $90, $30, $01, $12
+  .db $90, $31, $01, $1A
+  .db $90, $32, $01, $22
+  .db $90, $33, $01, $2A
 
-spritesLvl1:
+spritesLvl6:
   .db $67, $04, $01, $92 ; exit
   .db $67, $05, $01, $9A
   .db $67, $06, $01, $A2
@@ -3015,14 +3131,14 @@ spritesLvl1:
   .db $6F, $15, $01, $9A
   .db $6F, $16, $01, $A2
   .db $6F, $17, $01, $AA
-  .db $98, $20, $01, $32 ; pause btn
-  .db $98, $21, $01, $3A
-  .db $98, $22, $01, $42
-  .db $98, $23, $01, $4A
-  .db $A0, $30, $01, $32
-  .db $A0, $31, $01, $3A
-  .db $A0, $32, $01, $42
-  .db $A0, $33, $01, $4A
+  .db $90, $00, $01, $82 ; pause btn
+  .db $90, $01, $01, $8A
+  .db $90, $02, $01, $92
+  .db $90, $03, $01, $9A
+  .db $98, $10, $01, $82
+  .db $98, $11, $01, $8A
+  .db $98, $12, $01, $92
+  .db $98, $13, $01, $9A
 
 ; spritesPointersTwo:
 ;   .dw spritesLvl4
@@ -3098,9 +3214,9 @@ buttonsPositions:
 ;   ; .db $18, $17, $24, $0A, $24, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $1F, $18, $15, $1E, $1D, $12, $18, $17, $0A, $1B, $22, $24, $1D, $0E, $0C, $11, $17, $18, $15, $18, $10, $22, $24, $0C, $0A, $15, $15
 ;   ; .db $0E, $0D, $24, $1D, $11, $0E, $24, $1F, $11, $1C, $2F
 ;   .db $24, $12, $17, $24, $1D, $11, $0E, $24, $09, $00, $1C, $24, $16, $18, $1F, $12, $0E, $1C, $24, $20, $0E, $1B, $0E, $24, $1D, $11, $0E, $24, $24, $24, $24, $24, $24, $0E, $17, $1D, $0E, $1B, $1D, $0A, $12, $17, $16, $0E, $17, $1D, $24, $0F, $12, $1B, $1C, $1D, $24, $0C, $11, $18, $12, $0C, $0E, $2F, $24, $24
-;   .db $24, $24, $24, $16, $18, $1F, $12, $0E, $1C, $24, $20, $0E, $1B, $0E, $24, $1C, $1D, $18, $1B, $0E, $0D, $24, $18, $17, $24, $0A, $24, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $1F, $18, $15, $1E, $1D, $12, $18, $17, $0A, $1B, $22, $24, $1D, $0E, $0C, $11, $17, $18, $15, $18, $10, $22, $24, $0C, $0A 
-;   .db $15, $15, $0E, $0D, $24, $1D, $11, $0E, $24, $1F, $11, $1C, $2F, $24, $0E, $15, $24, $0A, $1E, $16, $0E, $17, $1D, $18, $24, $0D, $0E, $24, $0D, $0E, $16, $0A, $17, $0D, $0A, $24, $24, $10, $0E, $17, $0E, $1B, $18, $24, $1E, $17, $0A, $24, $17, $0E, $0C, $0E, $1C, $12, $0D, $0A, $0D, $24, $24, $24, $24, $24 
-;   .db $24, $24, $24, $24, $24, $24, $24, $12, $16, $19, $1B, $0E, $1F, $12, $1C, $1D, $0A, $2F, $24, $17, $18, $24, $0E, $1B, $0A, $24, $19, $18, $1C, $12, $0B, $15, $0E, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $1B, $24, $15, $0A, $1C, $24, $19, $0E, $15, $12, $0C, $1E, $15, $0A, $1C 
+;   .db $24, $24, $24, $16, $18, $1F, $12, $0E, $1C, $24, $20, $0E, $1B, $0E, $24, $1C, $1D, $18, $1B, $0E, $0D, $24, $18, $17, $24, $0A, $24, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $1F, $18, $15, $1E, $1D, $12, $18, $17, $0A, $1B, $22, $24, $1D, $0E, $0C, $11, $17, $18, $15, $18, $10, $22, $24, $0C, $0A
+;   .db $15, $15, $0E, $0D, $24, $1D, $11, $0E, $24, $1F, $11, $1C, $2F, $24, $0E, $15, $24, $0A, $1E, $16, $0E, $17, $1D, $18, $24, $0D, $0E, $24, $0D, $0E, $16, $0A, $17, $0D, $0A, $24, $24, $10, $0E, $17, $0E, $1B, $18, $24, $1E, $17, $0A, $24, $17, $0E, $0C, $0E, $1C, $12, $0D, $0A, $0D, $24, $24, $24, $24, $24
+;   .db $24, $24, $24, $24, $24, $24, $24, $12, $16, $19, $1B, $0E, $1F, $12, $1C, $1D, $0A, $2F, $24, $17, $18, $24, $0E, $1B, $0A, $24, $19, $18, $1C, $12, $0B, $15, $0E, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $1B, $24, $15, $0A, $1C, $24, $19, $0E, $15, $12, $0C, $1E, $15, $0A, $1C
 ;   .db $24, $0A, $24, $24, $24, $24, $24, $24, $24, $1D, $12, $0E, $16, $19, $18, $2F, $24, $0F, $1E, $0E, $24, $0E, $17, $1D, $18, $17, $0C, $0E, $1C, $24, $0C, $1E, $0A, $17, $0D, $18, $24, $0E, $15, $24, $24, $0C, $18, $16, $12, $1D, $0E, $24, $0D, $0E, $24, $1F, $12, $0D, $0E, $18, $24, $1C, $1D, $18, $1B, $0E, $1C
 ;   .db $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $0D, $0E, $1D, $0E, $1B, $16, $12, $17, $18, $24, $15, $0A, $24, $15, $0E, $22, $24, $0D, $0E, $15, $24, $19, $1B, $0E, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $0D, $18, $2F, $24, $0C, $0A, $0D, $0A, $24, $0C, $15, $12, $0E
 ;   .db $17, $1D, $0E, $24, $1D, $0E, $17, $12, $0A, $24, $24, $1A, $1E, $0E, $24, $0D, $0E, $1F, $18, $15, $1F, $0E, $1B, $24, $15, $0A, $1C, $24, $19, $0E, $15, $12, $0C, $1E, $15, $0A, $1C, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $0D, $0A, $1C, $2F, $24, $01, $02, $03, $0F, $1E, $0E, $24
@@ -3116,19 +3232,19 @@ buttonsPositions:
 
 
   .org $FFFA     ;first of the three vectors starts here
-  .dw NMI        ;when an NMI happens (once per frame if enabled) the 
+  .dw NMI        ;when an NMI happens (once per frame if enabled) the
                    ;processor will jump to the label NMI:
   .dw RESET      ;when the processor first turns on or is reset, it will jump
                    ;to the label RESET:
   .dw 0          ;external interrupt IRQ is not used in this tutorial
-  
-  
-;;;;;;;;;;;;;;  
-  
+
+
+;;;;;;;;;;;;;;
+
   .bank 4
   .org $0000
   .incbin "mario.chr"
-  
+
   .bank 5
   .org $0000
   .incbin "bladerewinderV2.chr"   ;includes 8KB graphics file from SMB1
