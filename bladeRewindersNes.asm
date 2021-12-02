@@ -1,14 +1,14 @@
-  .inesprg 1   ; 1x 16KB PRG code
+  .inesprg 2   ; 1x 16KB PRG code
   .ineschr 2   ; 1x  8KB CHR data
   .inesmap 3   ; mapper 0 = NROM, no bank swapping
   .inesmir 1   ; background mirroring
-  
+
 
 ;;;;;;;;;;;;;;;
 
 ;; DECLARE SOME VARIABLES HERE
   .rsset $0000  ;;start variables at ram location 0
-  
+
 pointerLo  .rs 1   ; pointer variables are declared in RAM
 pointerHi  .rs 1   ; low byte first, high byte immediately after
 gamestate  .rs 1  ; .rs 1 means reserve one byte of space
@@ -90,7 +90,7 @@ hasRewinded .rs 1
 playerHasMove .rs 1
 wcount .rs 1
 initialBGNumber .rs 1 ; initial/other screens number
-timerOn .rs 1; nes waiting test 
+timerOn .rs 1; nes waiting test
 timerIsRunning .rs 1
 charPosX .rs 1
 charPosY .rs 1
@@ -113,6 +113,7 @@ currentText .rs 2
 currentScreenAmount .rs 1
 currentTextLimit .rs 2
 isDialogue .rs 1
+initialTextPoint .rs 2
 ; sound
 sound_ptr .rs 2
 jmp_ptr .rs 2           ;a pointer variable for indirect jumps
@@ -145,18 +146,40 @@ REWINDBTN      = $02
 
 TEXT_SPEED = $01
 ; text intro
-TEXTSIZE_LOW   = $F0
-TEXTSIZE_PAGES  = $02
+TEXTSIZE_LOW   = $F0 ;low byte page/screen limit
+TEXTSIZE_PAGES  = $02 ;high byte page/screen limit, if limit is 1byte long its 00
 TEXT_SCREENS = $02
 TEXT_LIMIT_LOW = $1C
-TEXT_LIMIT_HIGH = $03
+TEXT_LIMIT_HIGH = $00 ; original $03
 
 ; dialogue one
 DIALOGUE_1_LOW = $AA
 DIALOGUE_1_PAGES  = $00
-DIALOGUE_1_SCREENS = $04
-DIALOGUE_1_LIMIT_LOW = $E6
+DIALOGUE_1_SCREENS = $05
+DIALOGUE_1_LIMIT_LOW = $EE
 DIALOGUE_1_LIMIT_HIGH = $02
+
+; dialogue two
+DIALOGUE_2_SCREENS = $05
+DIALOGUE_2_LIMIT_LOW = $DB
+DIALOGUE_2_LIMIT_HIGH = $01
+
+; dialogue three
+DIALOGUE_3_SCREENS = $05
+DIALOGUE_3_LIMIT_LOW = $D9
+DIALOGUE_3_LIMIT_HIGH = $01
+
+; dialogue four
+DIALOGUE_4_SCREENS = $05
+DIALOGUE_4_LIMIT_LOW = $5E
+DIALOGUE_4_LIMIT_HIGH = $01
+
+; text finale;
+TEXT_FINAL_SCREENS = $02
+TEXT_FINAL_LIMIT_LOW = $3E
+TEXT_FINAL_LIMIT_HIGH = $00
+
+LAST_LEVEL = $06
 
 ;;;;;;;;;;;;;;;;;;
 
@@ -164,16 +187,34 @@ DIALOGUE_1_LIMIT_HIGH = $02
 
 
   ; .bank 0
-  ; .org $C000 
+  ; .org $C000
 ;----- first 8k bank of PRG-ROM
   .bank 0
   .org $8000  ;we have two 16k PRG banks now.  We will stick our sound engine in the first one, which starts at $8000.
-  
+
   .include "sound_engine.asm"
 
-;----- second 8k bank of PRG-ROM    
-  ; .bank 1
-  ; .org $A000
+  spritesLvl3:
+  .db $7F, $04, $01, $82 ; exit
+  .db $7F, $05, $01, $8A
+  .db $7F, $06, $01, $92
+  .db $7F, $07, $01, $9A
+  .db $87, $14, $01, $82
+  .db $87, $15, $01, $8A
+  .db $87, $16, $01, $92
+  .db $87, $17, $01, $9A
+  .db $90, $00, $01, $22 ; rewind btn
+  .db $90, $01, $01, $2A
+  .db $90, $02, $01, $32
+  .db $90, $03, $01, $3A
+  .db $98, $10, $01, $22
+  .db $98, $11, $01, $2A
+  .db $98, $12, $01, $32
+  .db $98, $13, $01, $3A
+
+;----- second 8k bank of PRG-ROM
+  .bank 1
+  .org $A000
 
 RESET:
   SEI          ; disable IRQs
@@ -204,14 +245,14 @@ clrmem:
   STA $0200, x
   INX
   BNE clrmem
-   
+
 vblankwait2:      ; Second wait for vblank, PPU is ready after this
   BIT $2002
   BPL vblankwait2
 
 ;Enable sound channels
   jsr sound_init
-  
+
   lda #$01
   sta current_song
 
@@ -238,7 +279,7 @@ LoadPalettesLoop:
   BNE LoadPalettesLoop  ; Branch to LoadPalettesLoop if compare was Not Equal to zero
                         ; if compare was equal to 32, keep going down
 
-  LDA #$00 ;lvl number - 1
+  LDA #$04 ;lvl number - 1
   STA levelNumber
   LDA #$00
   STA letterCursor
@@ -251,15 +292,15 @@ LoadPalettesLoop:
 
   ;deactive intial screens
   ;JSR LoadLevel
-  
+
   ; LOADING TITLE SCREEN
   LDA #$00
   STA initialBGNumber
   JSR LoadBlackScreen
-  
+
   ; set screen player position
   LDA #$A3
-  STA posy  
+  STA posy
   LDA #$68
   STA posx
 
@@ -287,7 +328,7 @@ LoadPalettesLoop:
   STA gamestate
 
 
-              
+
   LDA #%10010000   ; enable NMI, sprites from Pattern Table 0, background from Pattern Table 1
   STA $2000
 
@@ -296,8 +337,8 @@ LoadPalettesLoop:
 
 Forever:
   JMP Forever     ;jump back to Forever, infinite loop, waiting for NMI
-  
- 
+
+
 
 NMI:
   LDA #$00
@@ -316,15 +357,15 @@ NMI:
   LDA #$00        ;;tell the ppu there is no background scrolling
   STA $2005
   STA $2005
-    
+
   ;;;all graphics updates done by here, run game engine
-  jsr sound_play_frame    ;run our sound engine after all drawing code is done. 
+  jsr sound_play_frame    ;run our sound engine after all drawing code is done.
                             ;this ensures our sound engine gets run once per frame.
 
   JSR ReadController1  ;;get the current button data for player 1
-  JSR ReadController2  ;;get the current button data for player 2
-  
-GameEngine:  
+  ; JSR ReadController2  ;;get the current button data for player 2
+
+GameEngine:
   LDA gamestate
   CMP #STATELOGO
   BEQ EngineLogo    ;;game is displaying logo screen
@@ -332,7 +373,7 @@ GameEngine:
   LDA gamestate
   CMP #STATETITLE
   BEQ EngineTitle    ;;game is displaying title screen
-    
+
   LDA gamestate
   CMP #STATEPLAYING
   BNE .gameEngineContinue   ;;game is playing
@@ -340,27 +381,28 @@ GameEngine:
 
   LDA gamestate
   CMP #STATEGAMEOVER
-  BEQ EngineGameOver  ;;game is displaying ending screen
-  
+  BNE .gameEngineContinue
+  JMP EngineGameOver  ;;game is displaying ending screen
+
 .gameEngineContinue
   LDA gamestate
   CMP #STATEINTRO
   BEQ EngineIntro
-GameEngineDone:  
-  
+GameEngineDone:
+
   JSR UpdateSprites
 
   RTI             ; return from interrupt
 
 EngineLogo: ; need to fix timer
-  JSR TimeWait
-  LDA wcount
-  CMP #$00
-  BNE EngineLogoDone
-  ; ReadStartLogoBtn:
-  ; LDA buttons1
-  ; AND #%00100000
-  ; BEQ EngineLogoDone ;btn not pressed
+;   JSR TimeWait
+;   LDA wcount
+;   CMP #$00
+;   BNE EngineLogoDone
+;   ; ReadStartLogoBtn:
+;   ; LDA buttons1
+;   ; AND #%00100000
+;   ; BEQ EngineLogoDone ;btn not pressed
   LDA #$01
   STA initialBGNumber
   ; LDA gamestate
@@ -411,6 +453,10 @@ ReadStartBtn:
   STA currentTextLimit+0
   LDA #TEXT_LIMIT_HIGH
   STA currentTextLimit+1
+  LDA #$40
+  STA initialTextPoint+0
+  LDA #$20
+  STA initialTextPoint+1
   ;change bank for BR char
   LDA #$01 ;;put new bank to use into A
   JSR Bankswitch ;;jump to bank switching code
@@ -420,16 +466,16 @@ ReadStartBtn:
   JSR sound_load
 ReadStartBtnDone:
   JMP GameEngineDone
-;;;;;;;;; 
- 
+;;;;;;;;;
+
 EngineGameOver:
   ;;if start button pressed
   ;;  turn screen off
   ;;  load title screen
   ;;  go to Title State
-  ;;  turn screen on 
+  ;;  turn screen on
   JMP GameEngineDone
- 
+
 ;;;;;;;;;;;
 
 EngineIntro:
@@ -471,9 +517,9 @@ EngineIntro:
   CLC
   ADC #$01
   STA screenCounter
-  LDA #$20
+  LDA initialTextPoint+1
   STA ppuCursorHigh
-  LDA #$40
+  LDA initialTextPoint+0
   STA ppuCursorLow
   LDA #$00
   STA letterCounter
@@ -485,7 +531,7 @@ EngineIntro:
   BEQ ReadIntroStartBtn
   JSR LoadBlackScreen
 ReadIntroStartBtn:
-  LDA #$00 
+  LDA #$00
   JSR sound_load
   LDA buttons1
   AND #%00010000
@@ -538,12 +584,12 @@ ReadLeftBtn:
   LDA buttons1
   STA buttons1pre
   LDA posx
-  SEC             
+  SEC
   SBC #PLAYERHMOV
   STA posx
   CLC
   LDA posy
-  SEC             
+  SEC
   SBC #PLAYERYMOV
   STA posy
   CLC
@@ -632,7 +678,7 @@ ReadDownBtn:
   STA posy
   LDA posx
   CLC
-  SEC             
+  SEC
   SBC #PLAYERHMOV
   STA posx
   LDA playerCoorY
@@ -671,7 +717,7 @@ ReadUpBtn:
   LDA buttons1
   STA buttons1pre
   LDA posy
-  SEC             
+  SEC
   SBC #PLAYERYMOV
   STA posy
   LDA posx
@@ -753,28 +799,28 @@ UpdateSprites:
   STA charSpriteY+1
   JSR UpdateCharactersSprites
   ; update BR two
-  LDA brsAmount
-  CMP #$02
-  BNE UpdateSpritesDone
-  LDA brTwoPosX
-  STA charPosX
-  LDA brTwoPosY
-  STA charPosY
-  LDA #LOW(BRTWOX)
-  STA charSpriteX+0
-  LDA #HIGH(BRTWOX)
-  STA charSpriteX+1
-  LDA #LOW(BRTWOY)
-  STA charSpriteY+0
-  LDA #HIGH(BRTWOY)
-  STA charSpriteY+1
-  JSR UpdateCharactersSprites
-UpdateSpritesDone:  
+  ; LDA brsAmount
+  ; CMP #$02
+  ; BNE UpdateSpritesDone
+  ; LDA brTwoPosX
+  ; STA charPosX
+  ; LDA brTwoPosY
+  ; STA charPosY
+  ; LDA #LOW(BRTWOX)
+  ; STA charSpriteX+0
+  ; LDA #HIGH(BRTWOX)
+  ; STA charSpriteX+1
+  ; LDA #LOW(BRTWOY)
+  ; STA charSpriteY+0
+  ; LDA #HIGH(BRTWOY)
+  ; STA charSpriteY+1
+  ; JSR UpdateCharactersSprites
+UpdateSpritesDone:
   RTS
 
 UpdateCharactersSprites:
   LDY #$00
-  LDA charPosX 
+  LDA charPosX
   STA [charSpriteX], Y
   LDY #$08
   STA [charSpriteX], Y
@@ -891,7 +937,7 @@ CheckNextPosition:
   LDA #$01
   STA canMove
   LDX #$00
-  LDY #$00  
+  LDY #$00
 BlockLoop:
   INX
   LDA [levelBlocks], Y
@@ -922,17 +968,17 @@ CheckForBRs:
   STA canMove
   RTS
 BrContinue:
-  LDA brsAmount
-  CMP #$02
-  BNE CheckBRDone
-  LDA brTwoCoorX
-  CMP playerPossibleCoorX
-  BNE CheckBRDone
-  LDA brTwoCoorY
-  CMP playerPossibleCoorY
-  BNE CheckBRDone
-  LDA #$00
-  STA canMove
+  ; LDA brsAmount
+  ; CMP #$02
+  ; BNE CheckBRDone
+  ; LDA brTwoCoorX
+  ; CMP playerPossibleCoorX
+  ; BNE CheckBRDone
+  ; LDA brTwoCoorY
+  ; CMP playerPossibleCoorY
+  ; BNE CheckBRDone
+  ; LDA #$00
+  ; STA canMove
 CheckBRDone:
   RTS
 
@@ -955,7 +1001,7 @@ CheckButtonsLoop:
   ; if 1 is paused
   ; if is player, do nothing
   ; set current Paused
-  INY 
+  INY
   LDA [levelButtons], Y
   CMP #PAUSEDBTN
   BNE CheckRewindBtn
@@ -975,7 +1021,7 @@ CheckRewindBtn:
   LDA currentIsPlayer
   CMP #$01
   BNE ButtonsLoopDone
-  ; set rewindaction
+  ; set rewind action
   JSR RewindBRs
   RTS
 ButtonsLoopContinue:
@@ -990,6 +1036,8 @@ RewindBRs:
   ; set rewindtrigger to prevent move
   LDA #$01
   STA hasRewinded
+  LDA #$0B
+  JSR sound_load
   ; get last position of one and apply
   LDA brOneLastCoorX
   STA brOneCoorX
@@ -1003,14 +1051,14 @@ RewindBRs:
   LDA brsAmount
   CMP #$01
   BEQ RewindDone
-  LDA brTwoLastCoorX
-  STA brTwoCoorX
-  LDA brTwoLastCoorY
-  STA brTwoCoorY
-  LDA brTwoLastPosX
-  STA brTwoPosX
-  LDA brTwoLastPosY
-  STA brTwoPosY
+  ; LDA brTwoLastCoorX
+  ; STA brTwoCoorX
+  ; LDA brTwoLastCoorY
+  ; STA brTwoCoorY
+  ; LDA brTwoLastPosX
+  ; STA brTwoPosX
+  ; LDA brTwoLastPosY
+  ; STA brTwoPosY
 RewindDone:
   RTS
 
@@ -1062,42 +1110,41 @@ ContinueMove:
   LDA brCurrentPaused
   STA brOnePaused
 NextBrMove:
-  LDA brsAmount
-  CMP #$02
-  BNE MoveBrsDone
-  LDA brTwoPaused
-  CMP #$01
-  BEQ MoveBrsDone
-  LDA brTwoPosX
-  STA brCurrentPosX
-  LDA brTwoPosY
-  STA brCurrentPosY
-  LDA brTwoCoorX
-  STA brCurrentCoorX
-  LDA brTwoCoorY
-  STA brCurrentCoorY
-  JSR MoveBROne
-  ; store previous position
-  LDA brTwoPosX
-  STA brTwoLastPosX
-  LDA brTwoPosY
-  STA brTwoLastPosY
-  LDA brTwoCoorX
-  STA brTwoLastCoorX
-  LDA brTwoCoorY
-  STA brTwoLastCoorY
-  ;apply results to brTwo
-  LDA brCurrentPosX
-  STA brTwoPosX
-  LDA brCurrentPosY
-  STA brTwoPosY
-  LDA brCurrentCoorX
-  STA brTwoCoorX
-  LDA brCurrentCoorY
-  STA brTwoCoorY
-  LDA brCurrentPaused
-  STA brTwoPaused
-
+  ; LDA brsAmount
+  ; CMP #$02
+  ; BNE MoveBrsDone
+  ; LDA brTwoPaused
+  ; CMP #$01
+  ; BEQ MoveBrsDone
+  ; LDA brTwoPosX
+  ; STA brCurrentPosX
+  ; LDA brTwoPosY
+  ; STA brCurrentPosY
+  ; LDA brTwoCoorX
+  ; STA brCurrentCoorX
+  ; LDA brTwoCoorY
+  ; STA brCurrentCoorY
+  ; JSR MoveBROne
+  ; ; store previous position
+  ; LDA brTwoPosX
+  ; STA brTwoLastPosX
+  ; LDA brTwoPosY
+  ; STA brTwoLastPosY
+  ; LDA brTwoCoorX
+  ; STA brTwoLastCoorX
+  ; LDA brTwoCoorY
+  ; STA brTwoLastCoorY
+  ; ;apply results to brTwo
+  ; LDA brCurrentPosX
+  ; STA brTwoPosX
+  ; LDA brCurrentPosY
+  ; STA brTwoPosY
+  ; LDA brCurrentCoorX
+  ; STA brTwoCoorX
+  ; LDA brCurrentCoorY
+  ; STA brTwoCoorY
+  ; LDA brCurrentPaused
+  ; STA brTwoPaused
 MoveBrsDone:
   RTS
   ;check BR total number on level
@@ -1241,7 +1288,7 @@ MoveBRUp:
   SBC #PLAYERYMOV
   STA brCurrentPosY
   LDA brCurrentPosX
-  CLC       
+  CLC
   ADC #PLAYERHMOV
   STA brCurrentPosX
   LDA brCurrentCoorY
@@ -1255,7 +1302,7 @@ MoveBRLeft:
   SBC #PLAYERHMOV
   STA brCurrentPosX
   LDA brCurrentPosY
-  SEC      
+  SEC
   SBC #PLAYERYMOV
   STA brCurrentPosY
   LDA brCurrentCoorX
@@ -1269,7 +1316,7 @@ MoveBRDown:
   ADC #PLAYERYMOV
   STA brCurrentPosY
   LDA brCurrentPosX
-  SEC      
+  SEC
   SBC #PLAYERHMOV
   STA brCurrentPosX
   LDA brCurrentCoorY
@@ -1282,8 +1329,8 @@ MoveBRRight:
   CLC
   ADC #PLAYERHMOV
   STA brCurrentPosX
-  LDA brCurrentPosY   
-  CLC       
+  LDA brCurrentPosY
+  CLC
   ADC #PLAYERYMOV
   STA brCurrentPosY
   LDA brCurrentCoorX
@@ -1408,7 +1455,7 @@ DistanceMultiplication:
   BNE MultLoop
   STA multTempResult
   RTS
- 
+
 CheckIfExit:
   LDA #$00
   STA playerHasWon
@@ -1420,6 +1467,8 @@ CheckIfExit:
   BNE CheckIfExitDone
   LDA #$01
   STA playerHasWon
+  LDA #$0A
+  JSR sound_load
   JSR LoadNxtLevel
 CheckIfExitDone:
   RTS
@@ -1469,6 +1518,12 @@ LoadNxtLevel:
   STA levelNumber
   JSR CheckDialogue
 ResetLevel:
+  ; check if game is done, if it is, jmp to reset? or go to reset routine.
+  LDA levelNumber
+  CMP #LAST_LEVEL; <-- should be last lvl +1
+  BNE .continueReset
+  JMP RESET
+.continueReset:
   LDA #$00
   STA playerLost
   STA brOnePaused
@@ -1478,7 +1533,7 @@ ResetLevel:
   ; STA playerCoorX
   ; STA playerCoorY
   ; LDA #$A3
-  ; STA posy  
+  ; STA posy
   ; LDA #$68
   ; STA posx
   JSR SetPlayerInitialPos
@@ -1515,29 +1570,93 @@ ReadController1Loop:
   DEX
   BNE ReadController1Loop
   RTS
-  
-ReadController2:
-  LDA #$01
-  STA $4016
-  LDA #$00
-  STA $4016
-  LDX #$08
-ReadController2Loop:
-  LDA $4017
-  LSR A            ; bit0 -> Carry
-  ROL buttons2     ; bit0 <- Carry
-  DEX
-  BNE ReadController2Loop
-  RTS  
+
+; ReadController2:
+;   LDA #$01
+;   STA $4016
+;   LDA #$00
+;   STA $4016
+;   LDX #$08
+; ReadController2Loop:
+;   LDA $4017
+;   LSR A            ; bit0 -> Carry
+;   ROL buttons2     ; bit0 <- Carry
+;   DEX
+;   BNE ReadController2Loop
+;   RTS
 
 LoadLevel:
   lda levelNumber ;gets the number of the current level
 	asl A ;multiplies it by 2 since each pointer is 2 bytes
 	tax ;use it as an index
-	lda spritesPointers+0, x ;copies the low byte to ZP
+  ; LDY levelNumber
+  ; CPY #$02
+  ; BPL .secondSprites
+  LDA levelNumber
+  CMP #$00
+  BEQ .setOne
+  LDA levelNumber
+  CMP #$01
+  BEQ .setTwo
+  LDA levelNumber
+  CMP #$02
+  BEQ .setThree
+  LDA levelNumber
+  CMP #$03
+  BEQ .setFour
+  LDA levelNumber
+  CMP #$04
+  BEQ .setFive
+  LDA levelNumber
+  CMP #$05
+  BEQ .setSix
+.setOne:
+  lda #LOW(spritesLvl1) ;copies the low byte to ZP
 	sta levelSprites+0
-	lda spritesPointers+1, x ;copies the high byte to ZP
+	lda #HIGH(spritesLvl1);copies the high byte to ZP
 	sta levelSprites+1
+  jmp .continue
+.setTwo:
+  lda #LOW(spritesLvl2) ;copies the low byte to ZP
+	sta levelSprites+0
+	lda #HIGH(spritesLvl2);copies the high byte to ZP
+	sta levelSprites+1
+  jmp .continue
+.setThree:
+  lda #LOW(spritesLvl3) ;copies the low byte to ZP
+	sta levelSprites+0
+	lda #HIGH(spritesLvl3);copies the high byte to ZP
+	sta levelSprites+1
+  jmp .continue
+.setFour:
+  lda #LOW(spritesLvl4) ;copies the low byte to ZP
+	sta levelSprites+0
+	lda #HIGH(spritesLvl4);copies the high byte to ZP
+	sta levelSprites+1
+  jmp .continue
+.setFive:
+  lda #LOW(spritesLvl5) ;copies the low byte to ZP
+	sta levelSprites+0
+	lda #HIGH(spritesLvl5);copies the high byte to ZP
+	sta levelSprites+1
+  jmp .continue
+.setSix:
+  lda #LOW(spritesLvl6) ;copies the low byte to ZP
+	sta levelSprites+0
+	lda #HIGH(spritesLvl6);copies the high byte to ZP
+	sta levelSprites+1
+  jmp .continue
+  ; lda spritesPointers+0, x ;copies the low byte to ZP
+	; sta levelSprites+0
+	; lda spritesPointers+1, x ;copies the high byte to ZP
+	; sta levelSprites+1
+;   jmp .continue
+; .secondSprites:
+;   lda spritesPointersTwo+0, x ;copies the low byte to ZP
+; 	sta levelSprites+0
+; 	lda spritesPointersTwo+1, x ;copies the high byte to ZP
+; 	sta levelSprites+1
+.continue:
   LDY levelNumber
   LDA spritesTotalPerLvl, y
   STA spritesAmount
@@ -1571,12 +1690,18 @@ LoadLevel:
 LoadSprites:
   LDY #$00              ; start at 0
 LoadSpritesLoop:
-  LDA [levelSprites], y        ; load data from address (sprites +  x)
+  LDA spritesCharacters, y        ; load data from address (sprites +  x)
   STA $0200, y          ; store into RAM address ($0200 + x)
   INY                   ; X = X + 1
-  CPY spritesAmount     ; Compare X to hex $10, decimal
+  CPY #$30     ; Compare X to hex $10, decimal
   BNE LoadSpritesLoop   ; Branch to LoadSpritesLoop if compare was Not Equal to zero
-                        ; if compare was equal to 16, keep going down
+  LDY #$00
+.loadSpritesButtons:
+  LDA [levelSprites], y
+  STA $0230, Y
+  INY
+  CPY spritesAmount
+  BNE .loadSpritesButtons
 
 LoadBackground:
   LDA $2002             ; read PPU status to reset the high/low latch
@@ -1591,21 +1716,21 @@ LoadBackground:
   ;LDA #HIGH(levelBackground)
   LDA levelBackground+1
   STA pointerHi       ; put the high byte of the address into pointer
-  
+
   LDX #$00            ; start at pointer + 0
   LDY #$00
 OutsideLoop:
-  
+
 InsideLoop:
   LDA [pointerLo], y  ; copy one background byte from address in pointer plus Y
   STA $2007           ; this runs 256 * 4 times
-  
+
   INY                 ; inside loop counter
   CPY #$00
   BNE InsideLoop      ; run the inside loop 256 times before continuing down
-  
+
   INC pointerHi       ; low byte went 0 to 256, so high byte needs to be changed now
-  
+
   INX
   CPX #$04
   BNE OutsideLoop     ; run the outside loop 256 times before continuing down
@@ -1639,19 +1764,19 @@ LoadBRLoop:
   STA brOneCoorX
   LDA brCurrentCoorY
   STA brOneCoorY
-  LDA brsAmount
-  CMP #$02
-  BEQ LoadBRLoop
-  JMP LoadBRDone
+  ; LDA brsAmount
+  ; CMP #$02
+  ; BEQ LoadBRLoop
+  ; JMP LoadBRDone
 AssignBRTwo:
-  LDA brCurrentPosX
-  STA brTwoPosX
-  LDA brCurrentPosY
-  STA brTwoPosY
-  LDA brCurrentCoorX
-  STA brTwoCoorX
-  LDA brCurrentCoorY
-  STA brTwoCoorY
+  ; LDA brCurrentPosX
+  ; STA brTwoPosX
+  ; LDA brCurrentPosY
+  ; STA brTwoPosY
+  ; LDA brCurrentCoorX
+  ; STA brTwoCoorX
+  ; LDA brCurrentCoorY
+  ; STA brTwoCoorY
 LoadBRDone:
   RTS
 
@@ -1676,21 +1801,21 @@ LoadInitialBackground:
   ;LDA #HIGH(levelBackground)
   LDA levelBackground+1
   STA pointerHi       ; put the high byte of the address into pointer
-  
+
   LDX #$00            ; start at pointer + 0
   LDY #$00
 InitialOutsideLoop:
-  
+
 InitialInsideLoop:
   LDA [pointerLo], y  ; copy one background byte from address in pointer plus Y
   STA $2007           ; this runs 256 * 4 times
-  
+
   INY                 ; inside loop counter
   CPY #$00
   BNE InitialInsideLoop      ; run the inside loop 256 times before continuing down
-  
+
   INC pointerHi       ; low byte went 0 to 256, so high byte needs to be changed now
-  
+
   INX
   CPX #$04
   BNE InitialOutsideLoop     ; run the outside loop 256 times before continuing down
@@ -1703,22 +1828,22 @@ InitialInsideLoop:
 ;   STA $2006             ; write the high byte of $2000 address
 ;   LDA #$00
 ;   STA $2006             ; write the low byte of $2000 address
-  
+
 ;   LDX #$00            ; start at pointer + 0
 ;   LDY #$00
 ; .initialOutsideLoop:
-  
+
 ; .initialInsideLoop:
 ;   LDA #$24  ; copy one background byte from address in pointer plus Y
 ;   STA $2007           ; this runs 256 * 4 times
-  
+
 ;   INY                 ; inside loop counter
 ;   CPY #$00
-;   BNE .initialInsideLoop      ; run the inside loop 256 times before continuing down  
+;   BNE .initialInsideLoop      ; run the inside loop 256 times before continuing down
 ;   INX
 ;   CPX #$04
 ;   BNE .initialOutsideLoop     ; run the outside loop 256 times before continuing down
-  
+
 ;   ;; write attributes, in this case black and white (3rd palette)
 ;   LDA $2002             ; read PPU status to reset the high/low latch
 ;   LDA #$23
@@ -1743,7 +1868,7 @@ SQRCalculation:
  STA rootRegisterD ;D
  STA rootRegisterE ;E
  LDA numberToRoot
-SQRLoop: 
+SQRLoop:
  SEC
  SBC rootRegisterD
  CMP #$00
@@ -1757,7 +1882,7 @@ SQRLoop:
  LDX rootRegisterE
  INX
  STX rootRegisterE
- JMP SQRLoop 	
+ JMP SQRLoop
 Result:
  STA rootRemanent ; remanent
  LDA rootRegisterE
@@ -1765,85 +1890,265 @@ Result:
  ASL A
  CLC
  ADC rootRemanent
- STA rootResult ;result 
+ STA rootResult ;result
  RTS
-;;;;;;;;;;;;;;  
-TimeWait:
-  LDA timerOn
-  CMP #$01
-  BEQ TimeWaitDone
-  LDA #$01
-  STA timerOn
-  LDA	#10
-	STA	wcount
-bw1:
-  JSR	delay
-	DEC	wcount
-	BNE	bw1
-	JMP Forever ; jump to forever to wait for NMI for good rendering
+;;;;;;;;;;;;;;
+; TimeWait:
+;   LDA timerOn
+;   CMP #$01
+;   BEQ TimeWaitDone
+;   LDA #$01
+;   STA timerOn
+;   LDA	#10
+; 	STA	wcount
+; bw1:
+;   JSR	delay
+; 	DEC	wcount
+; 	BNE	bw1
+; 	JMP Forever ; jump to forever to wait for NMI for good rendering
 
-delay:
-	LDY	#255		;about 0.16s @ 2MHz 
-dloop2:
-	LDX	#255
-dloop1:
-	DEX
-	BNE	dloop1
-	DEY
-	BNE	dloop2
-TimeWaitDone:
-	RTS
+; delay:
+; 	LDY	#255		;about 0.16s @ 2MHz
+; dloop2:
+; 	LDX	#255
+; dloop1:
+; 	DEX
+; 	BNE	dloop1
+; 	DEY
+; 	BNE	dloop2
+; TimeWaitDone:
+; 	RTS
 ;;;;;; level sprites data
 spritesTotalPerLvl: ;value multiplied by four because of attributes
-  .db $50, $70, $50, $50, $50, $50
+  .db $40, $40, $40, $20, $40, $40
 
-spritesLvl1:
-     ;vert tile attr horiz
-  .db $80, $50, $03, $80
-  .db $80, $51, $03, $88
-  .db $88, $60, $03, $80
-  .db $88, $61, $03, $88
-  .db $90, $70, $03, $80
-  .db $90, $71, $03, $88
-  ; .db $63, $40, $00, $6C   ;BR 1
-  ;BR 1 full body
-  .db $73, $52, $02, $64
-  .db $73, $53, $02, $6C
-  .db $6B, $62, $02, $64
-  .db $6B, $63, $02, $6C
-  .db $63, $72, $02, $64
-  .db $63, $73, $02, $6C
-  ;.db $63, $40, $00, $6C   ;BR 2
-  ;.db $63, $41, $03, $6C   ; exit
-  .db $5F, $04, $01, $62
-  .db $5F, $05, $01, $6A
-  .db $5F, $06, $01, $72
-  .db $5F, $07, $01, $7A
-  .db $67, $14, $01, $62
-  .db $67, $15, $01, $6A
-  .db $67, $16, $01, $72
-  .db $67, $17, $01, $7A
+; spritesLvl1:
+;      ;vert tile attr horiz
+;   .db $80, $50, $03, $80
+;   .db $80, $51, $03, $88
+;   .db $88, $60, $03, $80
+;   .db $88, $61, $03, $88
+;   .db $90, $70, $03, $80
+;   .db $90, $71, $03, $88
+;   ; .db $63, $40, $00, $6C   ;BR 1
+;   ;BR 1 full body
+;   .db $73, $52, $02, $64
+;   .db $73, $53, $02, $6C
+;   .db $6B, $62, $02, $64
+;   .db $6B, $63, $02, $6C
+;   .db $63, $72, $02, $64
+;   .db $63, $73, $02, $6C
+;   ;.db $63, $40, $00, $6C   ;BR 2
+;   ;.db $63, $41, $03, $6C   ; exit
+;   .db $5F, $04, $01, $62
+;   .db $5F, $05, $01, $6A
+;   .db $5F, $06, $01, $72
+;   .db $5F, $07, $01, $7A
+;   .db $67, $14, $01, $62
+;   .db $67, $15, $01, $6A
+;   .db $67, $16, $01, $72
+;   .db $67, $17, $01, $7A
   ; .db $83, $41, $00, $6C   ;sprite 1
   ; .db $73, $41, $00, $8C   ;sprite 1
   ; .db $8B, $41, $00, $9C   ;sprite 1
 
-spritesLvl2:
-     ;vert tile attr horiz
-  .db $80, $50, $03, $80
-  .db $80, $51, $03, $88
-  .db $88, $60, $03, $80
-  .db $88, $61, $03, $88
-  .db $90, $70, $03, $80
-  .db $90, $71, $03, $88
-  ;BR 1 full body
-  .db $73, $52, $02, $64
-  .db $73, $53, $02, $6C
-  .db $6B, $62, $02, $64
-  .db $6B, $63, $02, $6C
-  .db $63, $72, $02, $64
-  .db $63, $73, $02, $6C
-  ; .db $83, $41, $00, $6C   ;sprite 1
-  ; .db $8B, $41, $00, $9C   ;sprite 1
+; spritesCharacters:
+;      ;vert tile attr horiz
+;   ;player
+;   .db $80, $50, $03, $80
+;   .db $80, $51, $03, $88
+;   .db $88, $60, $03, $80
+;   .db $88, $61, $03, $88
+;   .db $90, $70, $03, $80
+;   .db $90, $71, $03, $88
+;   ;BR 1 full body
+;   .db $73, $52, $02, $64
+;   .db $73, $53, $02, $6C
+;   .db $6B, $62, $02, $64
+;   .db $6B, $63, $02, $6C
+;   .db $63, $72, $02, $64
+;   .db $63, $73, $02, $6C
+
+
+; spritesButtonsLvl6:
+;   .db $98, $20, $01, $32 ; pause btn
+;   .db $98, $21, $01, $3A
+;   .db $98, $22, $01, $42
+;   .db $98, $23, $01, $4A
+;   .db $A0, $30, $01, $32
+;   .db $A0, $31, $01, $3A
+;   .db $A0, $32, $01, $42
+;   .db $A0, $33, $01, $4A
+
+; spriteButtons:
+;   .dw spritesButtonsLvl6
+;   .dw spritesButtonsLvl6
+;   .dw spritesButtonsLvl6
+;   .dw spritesButtonsLvl6
+;   .dw spritesButtonsLvl6
+;   .dw spritesButtonsLvl6
+;;;;;;;;;;;;;;; TEXTS ;;;;;;;;;;;;;;;;;;
+firstText:
+  .db $24, $0D, $1E, $1B, $12, $17, $10, $24, $1D, $11, $0E, $24, $08, $00, $1C, $2D, $24, $1D, $11, $0E
+  .db $24, $1F, $12, $0D, $0E, $18, $24, $1C, $1D, $18, $1B, $0E, $24, $20, $0A, $1C, $24, $0C, $1B, $0E
+  .db $0A, $1D, $0E, $0D, $2D, $24, $0A, $17, $0D, $24, $0F, $18, $1B, $24, $0A, $24, $15, $18, $17, $10
+  .db $24, $24, $24, $24, $24, $1D, $12, $16, $0E, $24, $1D, $11, $0E, $22, $24, $18, $0F, $0F, $0E, $1B
+  .db $0E, $0D, $24, $0E, $17, $1D, $0E, $1B, $1D, $0A, $12, $17, $16, $0E, $17, $1D, $24, $0B, $22, $24
+  .db $1B, $0E, $17, $1D, $12, $17, $10, $24, $16, $18, $1F, $12, $0E, $1C, $24, $12, $17, $24, $0A, $24
+  .db $24, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $1F, $18, $15, $1E, $1D, $12, $18, $17, $0A
+  .db $1B, $22, $24, $1D, $0E, $0C, $11, $17, $18, $15, $18, $10, $22, $24, $0C, $0A, $15, $15, $0E, $0D
+  .db $24, $1F, $11, $1C, $2F, $24, $0A, $24, $0D, $0E, $0C, $0A, $0D, $0E, $24, $15, $0A, $1D, $0E, $1B
+  .db $2D, $24, $1B, $0E, $17, $1D, $12, $17, $10, $24, $24, $24, $24, $16, $18, $1F, $12, $0E, $1C, $24
+  .db $20, $0A, $1C, $24, $0A, $17, $24, $0E, $1F, $0E, $1B, $22, $0D, $0A, $22, $24, $1D, $11, $12, $17
+  .db $10, $2F, $24, $24, $24, $1D, $11, $0E, $24, $1C, $0E, $0E, $16, $12, $17, $10, $15, $22, $24, $0E
+  .db $17, $0D, $15, $0E, $1C, $1C, $24, $0D, $0E, $16, $0A, $17, $0D, $24, $24, $24, $24, $0F, $18, $1B
+  .db $24, $1F, $11, $1C, $24, $15, $0E, $0F, $1D, $24, $16, $18, $1F, $12, $0E, $24, $1C, $1D, $18, $1B
+  .db $0E, $24, $24, $24, $24, $24, $24, $24, $24, $0C, $18, $16, $19, $0A, $17, $12, $0E, $1C, $24, $20
+  .db $12, $1D, $11, $24, $17, $18, $24, $1D, $12, $16, $0E, $24, $1D, $18, $24, $24, $24, $24, $24, $24
+  .db $24, $1B, $0E, $20, $12, $17, $0D, $24, $1D, $11, $0E, $12, $1B, $24, $16, $18, $1F, $12, $0E, $1C
+  .db $2F, $24, $1D, $11, $12, $1C, $24, $24, $24, $24, $24, $24, $24, $1C, $19, $0A, $1B, $14, $0E, $0D
+  .db $24, $19, $1B, $18, $1D, $0E, $1C, $1D, $1C, $24, $0A, $17, $0D, $24, $0C, $15, $0A, $1C, $11, $0E
+  .db $1C, $24, $24, $24, $24, $0F, $18, $1B, $24, $0A, $15, $16, $18, $1C, $1D, $24, $0A, $24, $22, $0E
+  .db $0A, $1B, $2F, $24, $1D, $18, $24, $0E, $17, $0D, $24, $1D, $11, $12, $1C, $24, $24, $0C, $18, $17
+  .db $0F, $15, $12, $0C, $1D, $2D, $24, $1D, $11, $0E, $24, $19, $1B, $0E, $28, $1B, $0E, $20, $12, $17
+  .db $0D, $24, $15, $0A, $20, $24, $24, $24, $24, $20, $0A, $1C, $24, $0C, $1B, $0E, $0A, $1D, $0E, $0D
+  .db $2D, $24, $0F, $18, $1B, $0C, $12, $17, $10, $24, $0C, $1E, $1C, $1D, $18, $16, $0E, $1B, $1C, $24
+  .db $24, $1D, $18, $24, $1B, $0E, $20, $12, $17, $0D, $24, $0F, $12, $15, $16, $1C, $24, $0B, $0E, $0F
+  .db $18, $1B, $0E, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $1D, $1E, $1B, $17, $12
+  .db $17, $10, $24, $1D, $11, $0E, $16, $2F, $24, $0A, $24, $17, $18, $1D, $0E, $24, $20, $0A, $1C, $24
+  .db $24, $24, $24, $24, $24, $0A, $0D, $0D, $0E, $0D, $24, $0E, $1F, $0E, $1B, $22, $24, $1D, $12, $16
+  .db $0E, $24, $0A, $24, $0C, $1E, $1C, $1D, $18, $16, $0E, $1B, $24, $0D, $12, $0D, $24, $17, $18, $1D
+  .db $24, $1B, $0E, $20, $12, $17, $0D, $24, $0A, $24, $16, $18, $1F, $12, $0E, $2D, $24, $0A, $17, $0D
+  .db $24, $18, $17, $24, $1D, $11, $0E, $24, $24, $1D, $11, $12, $1B, $0D, $24, $17, $18, $1D, $0E, $2D
+  .db $24, $1D, $11, $0E, $12, $1B, $24, $1F, $12, $0D, $0E, $18, $24, $1C, $1D, $18, $1B, $0E, $24, $24
+  .db $24, $0C, $0A, $1B, $0D, $24, $20, $0A, $1C, $24, $1B, $0E, $16, $18, $1F, $0E, $0D, $2F, $24, $16
+  .db $0A, $17, $22, $24, $1B, $0E, $1C, $12, $1C, $1D, $0E, $0D, $24, $1B, $0E, $1D, $1E, $1B, $17, $12
+  .db $17, $10, $24, $1D, $11, $0E, $12, $1B, $24, $0C, $0A, $1B, $0D, $1C, $2D, $24, $1C, $18, $24, $0A
+  .db $24, $17, $0E, $20, $24, $0F, $18, $1B, $0C, $0E, $24, $20, $0A, $1C, $24, $0E, $1C, $1D, $0A, $0B
+  .db $15, $12, $1C, $11, $0E, $0D, $24, $1D, $18, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24
+  .db $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $0E, $17, $0F, $18, $1B, $0C, $0E
+  .db $24, $1D, $11, $12, $1C, $24, $15, $0A, $20, $24, $2F, $2F, $2F, $24, $1D, $11, $0E, $24, $0B, $15
+  .db $0A, $0D, $0E, $24, $24, $1B, $0E, $20, $12, $17, $0D, $0E, $1B, $1C, $2F
+
+dialogueOne:
+  .db $24, $11, $12, $24, $0D, $0E, $0A, $1B, $2B, $24, $12, $24, $0A, $16, $24, $10, $18, $12, $17, $10
+  .db $24, $1C, $11, $18, $19, $19, $12, $17, $10, $24, $24, $24, $24, $0A, $17, $0D, $24, $12, $24, $1D
+  .db $11, $18, $1E, $10, $11, $1D, $24, $0A, $0B, $18, $1E, $1D, $24, $1B, $0E, $1D, $1E, $1B, $17, $12
+  .db $17, $10, $24, $24, $24, $1D, $11, $0E, $24, $16, $18, $1F, $12, $0E, $24, $20, $0E, $24, $1C, $0A
+  .db $20, $24, $22, $0E, $1C, $1D, $0E, $1B, $0D, $0A, $22, $2D, $24, $0B, $1E, $1D, $24, $12, $24, $0C
+  .db $0A, $17, $24, $17, $18, $1D, $24, $0F, $12, $17, $0D, $24, $12, $1D, $2D, $24, $20, $11, $0E, $1B
+  .db $0E, $24, $12, $1C, $24, $12, $1D, $2C, $24, $2F, $2F, $2F, $2F, $2F, $2F, $24, $18, $11, $2D, $24
+  .db $22, $18, $1E, $24, $0A, $15, $1B, $0E, $0A, $0D, $22, $24, $1B, $0E, $1D, $1E, $1B, $17, $0E, $0D
+  .db $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $12, $1D, $2D, $24, $1F, $0E, $1B, $22, $24
+  .db $10, $18, $18, $0D, $2F, $24, $18, $17, $0E, $24, $1A, $1E, $0E, $1C, $1D, $12, $18, $17, $2D, $24
+  .db $24, $24, $24, $22, $18, $1E, $24, $1B, $0E, $20, $18, $1E, $17, $0D, $24, $12, $1D, $2D, $24, $1B
+  .db $12, $10, $11, $1D, $2C, $24, $2F, $2F, $2F, $2F, $2F, $2F, $24, $24, $24, $20, $11, $0E, $17, $24
+  .db $0D, $12, $0D, $24, $22, $18, $1E, $24, $1D, $0E, $15, $15, $24, $16, $0E, $24, $1D, $18, $24, $0D
+  .db $18, $24, $12, $1D, $2C, $24, $24, $12, $24, $0D, $12, $0D, $24, $17, $18, $1D, $24, $11, $0E, $0A
+  .db $1B, $24, $22, $18, $1E, $24, $1C, $0A, $22, $24, $12, $1D, $2B, $24, $12, $0F, $24, $12, $24, $0D
+  .db $18, $24, $17, $18, $1D, $24, $0A, $17, $1C, $20, $0E, $1B, $24, $22, $18, $1E, $2D, $24, $12, $1D
+  .db $1C, $24, $0B, $0E, $0C, $0A, $1E, $1C, $0E, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24
+  .db $24, $12, $24, $0D, $12, $0D, $24, $17, $18, $1D, $24, $15, $12, $1C, $1D, $0E, $17, $24, $1D, $18
+  .db $24, $22, $18, $1E, $2B, $24, $2F, $2F, $2F, $2F, $2F, $2F, $24, $20, $0E, $15, $15, $2D, $24, $12
+  .db $1D, $1C, $24, $17, $18, $1D, $24, $0A, $24, $19, $1B, $18, $0B, $15, $0E, $16, $2D, $24, $12, $1D
+  .db $1C, $24, $24, $24, $24, $18, $1E, $1B, $24, $1C, $0E, $0C, $18, $17, $0D, $24, $0F, $0A, $1E, $15
+  .db $1D, $2D, $24, $20, $0E, $24, $13, $1E, $1C, $1D, $24, $11, $0A, $1F, $0E, $24, $24, $1D, $18, $24
+  .db $0B, $0E, $24, $16, $18, $1B, $0E, $24, $0C, $0A, $1B, $0E, $0F, $1E, $15, $24, $17, $0E, $21, $1D
+  .db $24, $1D, $12, $16, $0E, $24, $24, $24, $24, $2F, $2F, $2F, $2F, $2F, $2F, $24, $18, $1E, $1B, $24
+  .db $20, $11, $0A, $1D, $24, $2C, $2C, $24, $12, $24, $0C, $0A, $17, $24, $17, $18, $1D, $24, $24, $24
+  .db $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $0B, $0E, $15, $12, $0E, $1F, $0E, $24, $12
+  .db $1D, $1C, $24, $1D, $11, $0E, $24, $1D, $11, $12, $1B, $0D, $2F, $24, $17, $18, $2D, $24, $17, $18
+  .db $2D, $24, $24, $17, $18, $2B, $24, $1D, $11, $0E, $24, $0B, $15, $0A, $0D, $0E, $24, $1B, $0E, $20
+  .db $12, $17, $0D, $0E, $1B, $1C, $24, $0A, $1B, $0E, $24, $24, $24, $24, $24, $10, $18, $12, $17, $10
+  .db $24, $1D, $18, $24, $0B, $0E, $24, $11, $0E, $1B, $0E, $24, $0A, $17, $22, $24, $16, $12, $17, $1E
+  .db $1D, $0E, $2B, $24, $24, $24, $24, $2F, $2F, $2F, $2F, $2F, $2F, $24, $20, $0A, $12, $1D, $2D, $24
+  .db $12, $24, $11, $0E, $0A, $1B, $24, $1C, $18, $16, $0E, $1D, $11, $12, $17, $10, $24, $24, $24, $18
+  .db $1E, $1D, $1C, $12, $0D, $0E, $24, $2F, $2F, $2F, $24, $0D, $18, $24, $17, $18, $1D, $24, $20, $18
+  .db $1B, $1B, $22, $2D, $24, $12, $24, $0A, $16, $24, $24, $10, $18, $12, $17, $10, $24, $1D, $18, $24, $24
+  .db $10, $0E, $1D, $24, $1D, $18, $24, $1D, $11, $0E, $24, $1F, $12, $0D, $0E, $18, $24, $1C, $1D, $18
+  .db $1B, $0E, $24, $20, $12, $1D, $11, $18, $1E, $1D, $24, $10, $0E, $1D, $1D, $12, $17, $10, $24, $0C
+  .db $0A, $1E, $10, $11, $1D, $24, $0A, $17, $0D, $24, $1B, $0E, $20, $12, $17
+  .db $0D, $24, $1D, $11, $0A, $1D, $24, $24, $16, $18, $1F, $12, $0E, $2B
+
+dialogueTwo:
+  .db $24, $12, $24, $0A, $16, $24, $0A, $15, $1B, $0E, $0A, $0D, $22, $24, $0C, $15, $18, $1C, $0E, $24
+  .db $1D, $18, $24, $1D, $11, $0E, $24, $1F, $12, $0D, $0E, $18, $24, $1C, $1D, $18, $1B, $0E, $24, $2F
+  .db $2F, $2F, $24, $13, $1E, $1C, $1D, $24, $0A, $24, $0F, $0E, $20, $24, $16, $18, $1B, $0E, $24, $24
+  .db $24, $24, $24, $24, $24, $1C, $1D, $1B, $0E, $0E, $1D, $1C, $2B, $24, $0B, $1E, $1D, $24, $1D, $11
+  .db $0E, $24, $0B, $15, $0A, $0D, $0E, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $20
+  .db $12, $17, $0D, $0E, $1B, $1C, $24, $0A, $1B, $0E, $24, $17, $18, $1D, $24, $10, $12, $1F, $12, $17
+  .db $10, $24, $1E, $19, $2F, $24, $12, $24, $24, $0C, $0A, $17, $1D, $24, $15, $0E, $1D, $24, $1D, $11
+  .db $0E, $16, $24, $0C, $0A, $1D, $0C, $11, $24, $16, $0E, $24, $0A, $17, $0D, $24, $1D, $0A, $14, $0E
+  .db $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $0A, $20, $0A, $22, $24, $16, $22, $24, $0C
+  .db $0A, $1B, $0D, $2D, $24, $20, $12, $1D, $11, $18, $1E, $1D, $24, $12, $1D, $24, $12, $24, $20, $18
+  .db $17, $1D, $24, $0B, $0E, $24, $0A, $0B, $15, $0E, $24, $1D, $18, $24, $20, $0A, $1D, $0C, $11, $24
+  .db $0A, $17, $22, $24, $16, $18, $1B, $0E, $24, $24, $24, $24, $24, $24, $24, $16, $18, $1F, $12, $0E
+  .db $1C, $24, $0A, $17, $0D, $24, $12, $24, $20, $12, $15, $15, $24, $0B, $0E, $24, $0F, $18, $1B, $0C
+  .db $0E, $0D, $24, $1D, $18, $24, $24, $0D, $18, $24, $18, $1D, $11, $0E, $1B, $24, $1D, $11, $12, $17
+  .db $10, $1C, $24, $15, $12, $14, $0E, $24, $1B, $0E, $0A, $0D, $12, $17, $10, $24, $18, $1B, $24, $0E
+  .db $21, $0E, $1B, $0C, $12, $1C, $12, $17, $10, $2B, $24, $12, $0F, $24, $0A, $15, $15, $24, $10, $18
+  .db $0E, $1C, $24, $20, $0E, $15, $15, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24
+  .db $24, $1D, $18, $0D, $0A, $22, $2D, $24, $16, $0A, $22, $0B, $0E, $24, $12, $24, $0C, $0A, $17, $24
+  .db $1B, $0E, $17, $1D, $24, $1D, $11, $0E, $24, $24, $24, $24, $24, $16, $18, $1F, $12, $0E, $24, $0A
+  .db $0B, $18, $1E, $1D, $24, $1D, $11, $0E, $24, $1B, $18, $0B, $18, $1D, $24, $0F, $1B, $18, $16, $24
+  .db $1D, $11, $0E, $24, $24, $0F, $1E, $1D, $1E, $1B, $0E, $24, $2F, $2F, $2F, $24, $0A, $10, $0A, $12
+  .db $17, $2B, $24, $17, $18, $24, $17, $18, $2B, $24, $0F, $18, $0C, $1E, $1C, $2B, $24, $0F, $12, $1B
+  .db $1C, $1D, $24, $12, $24, $11, $0A, $1F, $0E, $24, $1D, $18, $24, $10, $0E, $1D, $24, $1D, $18, $24
+  .db $1D, $11, $0E, $24, $24, $24, $24, $24, $24, $1C, $1D, $18, $1B, $0E, $2F
+
+dialogueThree:
+  .db $24, $12, $24, $0A, $16, $24, $0A, $15, $1B, $0E, $0A, $0D, $22, $24, $12, $17, $1C, $12, $0D, $0E
+  .db $2D, $24, $0B, $1E, $1D, $24, $1D, $11, $0E, $24, $24, $24, $24, $0B, $15, $0A, $0D, $0E, $24, $1B
+  .db $0E, $20, $12, $17, $0D, $0E, $1B, $1C, $24, $0A, $1B, $0E, $24, $20, $0A, $1D, $0C, $11, $12, $17
+  .db $10, $2F, $24, $12, $24, $11, $0A, $1F, $0E, $24, $1D, $18, $24, $16, $18, $1F, $0E, $24, $1F, $0E
+  .db $1B, $22, $24, $0C, $0A, $1B, $0E, $0F, $1E, $15, $15, $22, $24, $0A, $17, $0D, $24, $20, $12, $1D
+  .db $11, $18, $1E, $1D, $24, $0A, $1D, $1D, $1B, $0A, $0C, $1D, $12, $17, $10, $24, $0A, $1D, $1D, $0E
+  .db $17, $1D, $12, $18, $17, $24, $24, $24, $24, $2F, $2F, $2F, $24, $20, $11, $0A, $1D, $24, $12, $1C
+  .db $24, $1D, $11, $0A, $1D, $2C, $24, $02, $21, $01, $24, $12, $17, $24, $24, $24, $24, $24, $24, $24
+  .db $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $19, $1B, $0E, $16, $12, $0E, $1B, $0E, $1C
+  .db $2C, $2B, $24, $12, $24, $0C, $0A, $17, $1D, $24, $16, $12, $1C, $1C, $24, $1D, $11, $12, $1C, $2D
+  .db $24, $12, $24, $11, $0A, $1F, $0E, $24, $1D, $18, $24, $0F, $12, $17, $0D, $24, $1D, $11, $0A, $1D
+  .db $24, $1F, $11, $1C, $2F, $24, $0E, $21, $0C, $1E, $1C, $0E, $24, $24, $24, $16, $0E, $24, $1C, $12
+  .db $1B, $2D, $24, $0C, $0A, $17, $24, $12, $24, $10, $18, $24, $1D, $18, $24, $1D, $11, $0E, $24, $24
+  .db $24, $24, $24, $24, $24, $24, $24, $0B, $0A, $1D, $11, $1B, $18, $18, $16, $2C, $24, $11, $0A, $2B
+  .db $24, $1D, $11, $0E, $24, $18, $15, $0D, $0E, $1C, $1D, $24, $1D, $1B, $12, $0C, $14, $24, $24, $12
+  .db $17, $24, $1D, $11, $0E, $24, $1C, $0C, $1B, $12, $19, $1D, $20, $1B, $12, $1D, $0E, $1B, $24, $16
+  .db $0A, $17, $1E, $0A, $15, $2B, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24
+  .db $24, $20, $0E, $15, $15, $2D, $24, $17, $18, $20, $24, $12, $24, $13, $1E, $1C, $1D, $24, $11, $0A
+  .db $1F, $0E, $24, $1D, $18, $24, $1C, $17, $0E, $0A, $14, $24, $24, $12, $17, $1D, $18, $24, $1D, $11
+  .db $0E, $24, $20, $0A, $1B, $0E, $11, $18, $1E, $1C, $0E, $24, $2F, $2F, $2F, $24, $12, $24, $0D, $18
+  .db $17, $1D, $24, $24, $24, $14, $17, $18, $20, $24, $20, $11, $0E, $1B, $0E, $24, $22, $18, $1E, $24
+  .db $0A, $1B, $0E, $24, $1F, $11, $1C, $2D, $24, $0B, $1E, $1D, $24, $12, $24, $24, $24, $20, $12, $15
+  .db $15, $24, $0F, $12, $17, $0D, $24, $22, $18, $1E, $24, $0A, $17, $0D, $24, $12, $24, $20, $12, $15
+  .db $15, $24, $1B, $0E, $20, $12, $17, $0D, $24, $22, $18, $1E, $2B
+
+dialogueFour:
+  .db $24, $11, $18, $1E, $1C, $1D, $18, $17, $2D, $24, $20, $0E, $24, $11, $0A, $1F, $0E, $24, $0A, $24
+  .db $19, $1B, $18, $0B, $15, $0E, $16, $2B, $24, $24, $24, $24, $24, $1D, $11, $0E, $22, $24, $20, $0E
+  .db $1B, $0E, $24, $20, $0A, $12, $1D, $12, $17, $10, $24, $0F, $18, $1B, $24, $16, $0E, $2B, $24, $0B
+  .db $1E, $1D, $24, $12, $24, $0C, $0A, $17, $24, $1C, $0E, $0E, $24, $1D, $11, $0E, $24, $1F, $11, $1C
+  .db $24, $2F, $2F, $2F, $24, $16, $22, $24, $19, $1B, $0E, $0C, $12, $18, $1E, $1C, $24, $2F, $2F, $2F
+  .db $24, $12, $24, $11, $0A, $1F, $0E, $24, $1D, $18, $24, $10, $0E, $1D, $24, $16, $22, $24, $11, $0A
+  .db $17, $0D, $1C, $24, $18, $17, $24, $24, $24, $1D, $11, $0A, $1D, $24, $1F, $11, $1C, $2F, $24, $0F
+  .db $18, $1B, $24, $1D, $11, $0E, $24, $1C, $0A, $14, $0E, $24, $18, $0F, $24, $16, $22, $24, $24, $24
+  .db $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $1C, $0A, $1D, $1E, $1B, $0D, $0A, $22, $24
+  .db $17, $12, $10, $11, $1D, $1C, $2D, $24, $12, $24, $11, $0A, $1F, $0E, $24, $1D, $18, $2B, $24, $24
+  .db $24, $24, $24, $0E, $1F, $0E, $1B, $22, $1D, $11, $12, $17, $10, $24, $0E, $17, $0D, $1C, $24, $17
+  .db $18, $20, $2B, $24, $12, $24, $1C, $20, $0E, $0A, $1B, $24, $18, $17, $24, $14, $0E, $0A, $17, $1E
+  .db $24, $1B, $0E, $0E, $1F, $0E, $1C, $24, $1D, $11, $0E, $22, $24, $0A, $1B, $0E, $24, $17, $18, $1D
+  .db $24, $10, $18, $12, $17, $10, $24, $1D, $18, $24, $10, $0E, $1D, $24, $0A, $20, $0A, $22, $24, $20
+  .db $12, $1D, $11, $24, $12, $1D, $2B, $24, $22, $18, $1E, $24, $24, $24, $24, $24, $24, $24, $24, $0A
+  .db $10, $0A, $12, $17, $1C, $1D, $24, $16, $22, $24, $0B, $15, $0A, $0D, $0E, $24, $1B, $0E, $20, $12
+  .db $17, $0D, $0E, $1B, $1C, $2D, $24, $16, $0A, $22, $24, $1D, $11, $0E, $24, $0B, $0E, $1C, $1D, $24, $24
+  .db $17, $0E, $1B, $0D, $24, $20, $12, $17, $2B
+
+lastText:
+  .db $24, $22, $18, $1E, $24, $11, $0A, $1F, $0E, $24, $1B, $0E, $20, $18, $1E, $17, $0D, $24, $1D, $11
+  .db $0E, $24, $16, $18, $1F, $12, $0E, $24, $0A, $17, $0D, $24, $24, $0D, $0E, $0F, $0E, $0A, $1D, $0E
+  .db $0D, $24, $1D, $11, $0E, $24, $0B, $15, $0A, $0D, $0E, $24, $1B, $0E, $20, $12, $17, $0D, $0E, $1B
+  .db $1C, $2B
+
+spritesLvl44:
   .db $67, $04, $01, $92 ; exit
   .db $67, $05, $01, $9A
   .db $67, $06, $01, $A2
@@ -1852,111 +2157,145 @@ spritesLvl2:
   .db $6F, $15, $01, $9A
   .db $6F, $16, $01, $A2
   .db $6F, $17, $01, $AA
-  ; .db $98, $20, $01, $32 ; pause btn
-  ; .db $98, $21, $01, $3A
-  ; .db $98, $22, $01, $42
-  ; .db $98, $23, $01, $4A
-  ; .db $A0, $30, $01, $32
-  ; .db $A0, $31, $01, $3A
-  ; .db $A0, $32, $01, $42
-  ; .db $A0, $33, $01, $4A
+  .db $98, $20, $01, $32 ; pause btn
+  .db $98, $21, $01, $3A
+  .db $98, $22, $01, $42
+  .db $98, $23, $01, $4A
+  .db $A0, $30, $01, $32
+  .db $A0, $31, $01, $3A
+  .db $A0, $32, $01, $42
+  .db $A0, $33, $01, $4A
 
-spritesPointers:
-  .dw spritesLvl2
-  .dw spritesLvl2
-  .dw spritesLvl2
-  .dw spritesLvl2
-  .dw spritesLvl2
-  .dw spritesLvl2
-  .dw spritesLvl2
-;;;;;;;;;;;;;;; TEXTS ;;;;;;;;;;;;;;;;;;
-firstText:
-  .db $24, $0D, $1E, $1B, $12, $17, $10, $24, $1D, $11, $0E, $24, $08, $00, $1C, $24, $1D, $11, $0E, $24
-  .db $1F, $12, $0D, $0E, $18, $24, $1C, $1D, $18, $1B, $0E, $24, $24, $20, $0A, $1C, $24, $0C, $1B, $0E
-  .db $0A, $1D, $0E, $0D, $24, $0A, $17, $0D, $24, $0F, $18, $1B, $24, $0A, $24, $15, $18, $17, $10, $24
-  .db $1D, $12, $16, $0E, $24, $1D, $11, $0E, $22, $24, $18, $0F, $0F, $0E, $1B, $0E, $0D, $24, $0E, $17
-  .db $1D, $0E, $1B, $1D, $0A, $12, $17, $16, $0E, $17, $1D, $24, $0B, $22, $24, $24, $24, $1B, $0E, $17
-  .db $1D, $12, $17, $10, $24, $16, $18, $1F, $12, $0E, $1C, $24, $12, $17, $24, $0A, $24, $24, $24, $24
-  .db $24, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $1F, $18, $15, $1E, $1D, $12, $18, $17, $0A
-  .db $1B, $22, $24, $1D, $0E, $0C, $11, $17, $18, $15, $18, $10, $22, $24, $0C, $0A, $15, $15, $0E, $0D
-  .db $24, $1F, $11, $1C, $2F, $24, $0A, $24, $0D, $0E, $0C, $0A, $0D, $0E, $24, $15, $0A, $1D, $0E, $1B
-  .db $24, $1B, $0E, $17, $1D, $12, $17, $10, $24, $24, $24, $24, $24, $16, $18, $1F, $12, $0E, $1C, $24
-  .db $20, $0A, $1C, $24, $0A, $17, $24, $0E, $1F, $0E, $1B, $22, $0D, $0A, $22, $24, $1D, $11, $12, $17
-  .db $10, $2F, $24, $24, $24, $1D, $11, $0E, $24, $1C, $0E, $0E, $16, $12, $17, $10, $15, $22, $24, $0E
-  .db $17, $0D, $15, $0E, $1C, $1C, $24, $0D, $0E, $16, $0A, $17, $0D, $24, $24, $24, $24, $0F, $18, $1B
-  .db $24, $1F, $11, $1C, $24, $15, $0E, $0F, $1D, $24, $1F, $12, $0D, $0E, $18, $24, $1C, $1D, $18, $1B
-  .db $0E, $24, $24, $24, $24, $24, $24, $24, $24, $0C, $18, $16, $19, $0A, $17, $12, $0E, $1C, $24, $20
-  .db $12, $1D, $11, $24, $17, $18, $24, $1D, $12, $16, $0E, $24, $1D, $18, $24, $24, $24, $24, $24, $24
-  .db $24, $1B, $0E, $20, $12, $17, $0D, $24, $1D, $11, $0E, $12, $1B, $24, $16, $18, $1F, $12, $0E, $1C
-  .db $2F, $24, $1D, $11, $12, $1C, $24, $24, $24, $24, $24, $24, $24, $1C, $19, $0A, $1B, $14, $0E, $0D
-  .db $24, $19, $1B, $18, $1D, $0E, $1C, $1D, $1C, $24, $0A, $17, $0D, $24, $1B, $12, $18, $1D, $1C, $24
-  .db $0F, $18, $1B, $24, $24, $0A, $15, $16, $18, $1C, $1D, $24, $0A, $24, $22, $0E, $0A, $1B, $2F, $24
-  .db $1D, $18, $24, $0E, $17, $0D, $24, $1D, $11, $12, $1C, $24, $24, $24, $24, $24, $24, $0C, $18, $17
-  .db $0F, $15, $12, $0C, $1D, $24, $1D, $11, $0E, $24, $19, $1B, $0E, $24, $1B, $0E, $20, $12, $17, $0D
-  .db $24, $15, $0A, $20, $24, $20, $0A, $1C, $24, $0C, $1B, $0E, $0A, $1D, $0E, $0D, $24, $0F, $18, $1B
-  .db $0C, $12, $17, $10, $24, $0C, $1E, $1C, $1D, $18, $16, $0E, $1B, $1C, $24, $1D, $18, $24, $24, $24
-  .db $24, $1B, $0E, $20, $12, $17, $0D, $24, $0F, $12, $15, $16, $1C, $24, $0B, $0E, $0F, $18, $1B, $0E
-  .db $24, $1B, $0E, $1D, $1E, $1B, $17, $12, $17, $10, $24, $24, $24, $1D, $11, $0E, $16, $2F, $24, $0A
-  .db $24, $17, $18, $1D, $0E, $24, $20, $0A, $1C, $24, $0A, $0D, $0D, $0E, $0D, $24, $0E, $1F, $0E, $1B
-  .db $22, $24, $24, $24, $24, $1D, $12, $16, $0E, $24, $0A, $24, $0C, $1E, $1C, $1D, $18, $16, $0E, $1B
-  .db $24, $0D, $12, $0D, $24, $17, $18, $1D, $24, $1B, $0E, $20, $12, $17, $0D, $24, $24, $0A, $24, $16
-  .db $18, $1F, $12, $0E, $24, $0A, $17, $0D, $24, $18, $17, $24, $1D, $11, $0E, $24, $1D, $11, $12, $1B
-  .db $0D, $24, $17, $18, $1D, $0E, $24, $24, $24, $1D, $11, $0E, $12, $1B, $24, $1F, $12, $0D, $0E, $18
-  .db $24, $1C, $1D, $18, $1B, $0E, $24, $0C, $0A, $1B, $0D, $24, $20, $0A, $1C, $24, $24, $24, $24, $24
-  .db $24, $1B, $0E, $16, $18, $1F, $0E, $0D, $2F, $24, $16, $0A, $17, $22, $24, $1B, $0E, $1C, $12, $1C
-  .db $1D, $0E, $0D, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $1D, $1E, $1B, $17, $12
-  .db $17, $10, $24, $1D, $11, $0E, $12, $1B, $24, $0C, $0A, $1B, $0D, $1C, $24, $1C, $18, $24, $0A, $24
-  .db $17, $0E, $20, $24, $24, $0F, $18, $1B, $0C, $0E, $24, $20, $0A, $1C, $24, $0E, $1C, $1D, $0A, $0B
-  .db $15, $12, $1C, $11, $0E, $0D, $24, $1D, $18, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24
-  .db $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $0E, $17, $0F, $18, $1B, $0C, $0E
-  .db $24, $1D, $11, $12, $1C, $24, $15, $0A, $20, $24, $2F, $2F, $2F, $24, $1D, $11, $0E, $24, $0B, $15
-  .db $0A, $0D, $0E, $24, $24, $1B, $0E, $20, $12, $17, $0D, $0E, $1B, $1C, $2F
+spritesLvl22:
+  .db $67, $04, $01, $92 ; exit
+  .db $67, $05, $01, $9A
+  .db $67, $06, $01, $A2
+  .db $67, $07, $01, $AA
+  .db $6F, $14, $01, $92
+  .db $6F, $15, $01, $9A
+  .db $6F, $16, $01, $A2
+  .db $6F, $17, $01, $AA
+  .db $98, $20, $01, $32 ; pause btn
+  .db $98, $21, $01, $3A
+  .db $98, $22, $01, $42
+  .db $98, $23, $01, $4A
+  .db $A0, $30, $01, $32
+  .db $A0, $31, $01, $3A
+  .db $A0, $32, $01, $42
+  .db $A0, $33, $01, $4A
 
-dialogueOne:
-  .db $24, $11, $0E, $22, $24, $11, $18, $17, $0E, $22, $24, $12, $24, $0A, $16, $24, $10, $18, $12, $17
-  .db $10, $24, $1C, $11, $18, $19, $19, $12, $17, $10, $24, $24, $24, $0A, $17, $0D, $24, $12, $24, $1D
-  .db $11, $18, $1E, $10, $11, $1D, $24, $0A, $0B, $18, $1E, $1D, $24, $1B, $0E, $1D, $1E, $1B, $17, $12
-  .db $17, $10, $24, $24, $24, $1D, $11, $0E, $24, $16, $18, $1F, $12, $0E, $24, $20, $0E, $24, $1C, $0A
-  .db $20, $24, $22, $0E, $1C, $1D, $0E, $1B, $0D, $0A, $22, $24, $0B, $1E, $1D, $24, $24, $12, $24, $0C
-  .db $0A, $17, $1D, $24, $0F, $12, $17, $0D, $24, $12, $1D, $24, $20, $11, $0E, $1B, $0E, $24, $12, $1C
-  .db $24, $12, $1D, $24, $24, $24, $24, $24, $24, $2F, $2F, $2F, $2F, $2F, $2F, $24, $18, $11, $24, $22
-  .db $18, $1E, $24, $0A, $15, $1B, $0E, $0A, $0D, $22, $24, $1B, $0E, $1D, $1E, $1B, $17, $0E, $0D, $24
-  .db $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $12, $1D, $24, $1F, $0E, $1B, $22, $24, $10
-  .db $18, $18, $0D, $2F, $24, $18, $17, $0E, $24, $1A, $1E, $0E, $1C, $1D, $12, $18, $17, $24, $22, $18
-  .db $1E, $24, $24, $1B, $0E, $20, $18, $1E, $17, $0D, $24, $12, $1D, $24, $1B, $12, $10, $11, $1D, $24
-  .db $2F, $2F, $2F, $2F, $2F, $2F, $24, $20, $11, $0E, $17, $24, $24, $24, $24, $0D, $12, $0D, $24, $22
-  .db $18, $1E, $24, $1D, $0E, $15, $15, $24, $16, $0E, $24, $1D, $18, $24, $0D, $18, $24, $12, $1D, $24
-  .db $12, $24, $24, $24, $24, $24, $24, $0D, $12, $0D, $17, $1D, $24, $11, $0E, $0A, $1B, $24, $22, $18
-  .db $1E, $24, $1C, $0A, $22, $24, $12, $1D, $2F, $24, $12, $0F, $24, $12, $24, $24, $24, $24, $24, $0D
-  .db $18, $17, $1D, $24, $0A, $17, $1C, $20, $0E, $1B, $24, $22, $18, $1E, $24, $12, $1D, $1C, $24, $0B
-  .db $0E, $0C, $0A, $1E, $1C, $0E, $24, $12, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24
-  .db $24, $0D, $12, $0D, $17, $1D, $24, $15, $12, $1C, $1D, $0E, $17, $24, $1D, $18, $24, $22, $18, $1E
-  .db $2F, $24, $2F, $2F, $2F, $2F, $2F, $2F, $24, $24, $24, $24, $24, $20, $0E, $15, $15, $24, $12, $1D
-  .db $1C, $24, $17, $18, $1D, $24, $0A, $24, $19, $1B, $18, $0B, $15, $0E, $16, $24, $12, $1D, $1C, $24
-  .db $18, $1E, $1B, $24, $24, $1C, $0E, $0C, $18, $17, $0D, $24, $0F, $0A, $1E, $15, $1D, $24, $20, $0E
-  .db $24, $13, $1E, $1C, $1D, $24, $11, $0A, $1F, $0E, $24, $1D, $18, $24, $0B, $0E, $24, $16, $18, $1B
-  .db $0E, $24, $0C, $0A, $1B, $0E, $0F, $1E, $15, $24, $17, $0E, $21, $1D, $24, $1D, $12, $16, $0E, $24
-  .db $2F, $2F, $2F, $2F, $2F, $2F, $24, $24, $24, $18, $1E, $1B, $24, $20, $11, $0A, $1D, $24, $12, $24
-  .db $0C, $0A, $17, $1D, $24, $0B, $0E, $15, $12, $0E, $1F, $0E, $24, $12, $1D, $1C, $24, $1D, $11, $0E
-  .db $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $1D, $11, $12, $1B, $0D, $2F, $24, $17, $18
-  .db $24, $17, $18, $24, $17, $18, $2F, $24, $1D, $11, $0E, $24, $0B, $15, $0A, $0D, $0E, $24, $24, $24
-  .db $24, $24, $24, $1B, $0E, $20, $12, $17, $0D, $0E, $1B, $1C, $24, $0A, $1B, $0E, $24, $10, $18, $12
-  .db $17, $10, $24, $1D, $18, $24, $0B, $0E, $24, $11, $0E, $1B, $0E, $24, $24, $0A, $17, $22, $24, $16
-  .db $12, $17, $1E, $1D, $0E, $2F, $24, $2F, $2F, $2F, $2F, $2F, $2F, $24, $20, $0A, $12, $1D, $24, $12
-  .db $24, $11, $0E, $0A, $1B, $24, $24, $1C, $18, $16, $0E, $1D, $11, $12, $17, $10, $24, $18, $1E, $1D
-  .db $1C, $12, $0D, $0E, $24, $2F, $2F, $2F, $24, $0D, $18, $17, $1D, $24, $24, $24, $24, $24, $24, $20
-  .db $18, $1B, $1B, $22, $24, $12, $24, $0A, $16, $24, $10, $18, $12, $17, $10, $24, $1D, $18, $24, $16
-  .db $0A, $14, $0E, $24, $12, $1D, $24, $1D, $18, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24
-  .db $24, $1D, $11, $0E, $24, $1F, $12, $0D, $0E, $18, $24, $1C, $1D, $18, $1B, $0E, $24, $20, $12, $1D
-  .db $11, $18, $1E, $1D, $24, $10, $0E, $1D, $1D, $12, $17, $10, $24, $0C, $0A, $1E, $10, $11, $1D, $24
-  .db $0A, $17, $0D, $24, $1B, $0E, $20, $12, $17, $0D, $24, $1D, $11, $0A, $1D, $24, $16, $18, $1F, $12
-  .db $0E
+
+spritesLvl1:
+  .db $5F, $04, $01, $62 ; exit
+  .db $5F, $05, $01, $6A
+  .db $5F, $06, $01, $72
+  .db $5F, $07, $01, $7A
+  .db $67, $14, $01, $62
+  .db $67, $15, $01, $6A
+  .db $67, $16, $01, $72
+  .db $67, $17, $01, $7A
+  .db $90, $20, $01, $62 ; pause btn
+  .db $90, $21, $01, $6A
+  .db $90, $22, $01, $72
+  .db $90, $23, $01, $7A
+  .db $98, $30, $01, $62
+  .db $98, $31, $01, $6A
+  .db $98, $32, $01, $72
+  .db $98, $33, $01, $7A
+
+spritesLvl2:
+  .db $67, $04, $01, $92 ; exit
+  .db $67, $05, $01, $9A
+  .db $67, $06, $01, $A2
+  .db $67, $07, $01, $AA
+  .db $6F, $14, $01, $92
+  .db $6F, $15, $01, $9A
+  .db $6F, $16, $01, $A2
+  .db $6F, $17, $01, $AA
+  .db $98, $20, $01, $32 ; pause btn
+  .db $98, $21, $01, $3A
+  .db $98, $22, $01, $42
+  .db $98, $23, $01, $4A
+  .db $A0, $30, $01, $32
+  .db $A0, $31, $01, $3A
+  .db $A0, $32, $01, $42
+  .db $A0, $33, $01, $4A
+
 
 ;;;;;;;;;;;;;
-  
-  
-  .bank 1
-  .org $E000
+
+  ; bglvl07:
+  ; incbin "bladerewindertest.nam"
+  ; third 8k PRG bank
+  .bank 2
+  .org $C000
+
+
+; spritesButtonsLvl6:
+;   .db $98, $20, $01, $32 ; pause btn
+;   .db $98, $21, $01, $3A
+;   .db $98, $22, $01, $42
+;   .db $98, $23, $01, $4A
+;   .db $A0, $30, $01, $32
+;   .db $A0, $31, $01, $3A
+;   .db $A0, $32, $01, $42
+;   .db $A0, $33, $01, $4A
+
+; lastText:
+;   .db $24, $0A, $0F, $1D, $0E, $1B, $24, $1C, $1E, $0C, $0C, $0E, $1C, $1C, $0F, $1E, $15, $15, $22, $24
+;   ; .db $0C, $18, $16, $19, $15, $0E, $1D, $12, $17, $10, $24, $24, $24, $11, $12, $1C, $24, $16, $12, $1C
+;   ; .db $1C, $12, $18, $17, $2D, $24, $0C, $1E, $1C, $1D, $18, $16, $0E, $1B, $24, $00, $02, $00, $02, $08
+;   ; .db $08, $24, $24, $24, $24, $20, $0A, $1C, $24, $0A, $0B, $15, $0E, $24, $1D, $18, $24, $14, $0E, $0E
+;   ; .db $19, $24, $11, $12, $1C, $24, $0C, $0A, $1B, $0D, $24, $0A, $17, $0D, $24, $24, $24, $1D, $11, $1E
+;   ; .db $1C, $24, $20, $0A, $1C, $24, $0A, $0B, $15, $0E, $24, $1D, $18, $24, $1B, $0E, $17, $1D, $24, $16
+;   ; .db $18, $1B, $0E, $24, $0A, $17, $0D, $24, $24, $16, $18, $1B, $0E, $24, $16, $18, $1F, $12, $0E, $1C
+;   ; .db $2F, $24, $11, $0A, $1F, $12, $17, $10, $24, $17, $18, $24, $0E, $1F, $12, $0D, $0E, $17, $0C, $0E
+; ;   .db $24, $0F, $18, $1B, $24, $1D, $11, $0E, $24, $0C, $0A, $1C, $0E, $2D, $24, $1D, $11, $0E, $24, $0B
+; ;   .db $15, $0A, $0D, $0E, $24, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $20, $12, $17, $0D, $0E
+; ;   .db $1B, $1C, $24, $11, $0A, $0D, $24, $17, $18, $24, $1B, $0E, $0A, $1C, $18, $17, $24, $1D, $18, $24
+; ;   .db $24, $24, $24, $24, $24, $0F, $18, $15, $15, $18, $20, $24, $1D, $11, $0E, $24, $0C, $15, $12, $0E
+; ;   .db $17, $1D, $2D, $24, $1C, $18, $24, $1D, $11, $0E, $24, $24, $24, $24, $24, $24, $24, $0C, $18, $16
+; ;   .db $19, $0A, $17, $22, $24, $20, $0A, $1C, $24, $1C, $1E, $0E, $0D, $24, $0F, $18, $1B, $24, $11, $0A
+; ;   .db $1B, $0A, $1C, $1C, $16, $0E, $17, $1D, $24, $0A, $17, $0D, $24, $0A, $0B, $1E, $1C, $0E, $24, $18
+; ;   .db $0F, $24, $19, $18, $20, $0E, $1B, $2F, $24, $1D, $11, $12, $1C, $24, $1C, $0E, $1D, $24, $24, $24
+; ;   .db $24, $19, $1B, $0E, $0C, $0E, $0D, $0E, $17, $1D, $1C, $24, $0A, $17, $0D, $24, $0A, $0F, $1D, $0E
+; ;   .db $1B, $24, $0A, $24, $0F, $0E, $20, $24, $24, $24, $24, $24, $24, $16, $18, $17, $1D, $11, $1C, $24
+; ;   .db $1C, $0E, $1F, $0E, $1B, $0A, $15, $24, $0C, $15, $12, $0E, $17, $1D, $1C, $24, $1C, $1E, $0E, $0D
+; ;   .db $24, $0F, $18, $1B, $24, $1D, $11, $0E, $24, $1C, $0A, $16, $0E, $24, $1D, $11, $12, $17, $10, $2D
+; ;   .db $24, $1D, $11, $1E, $1C, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $0D, $0E, $1D
+; ;   .db $0E, $1B, $16, $12, $17, $12, $17, $10, $24, $1D, $11, $0E, $24, $0E, $17, $0D, $24, $18, $0F, $24
+; ;   .db $1D, $11, $0E, $24, $24, $24, $24, $24, $24, $0B, $15, $0A, $0D, $0E, $24, $1B, $0E, $20, $12, $17
+; ;   .db $0D, $0E, $1B, $24, $19, $1B, $18, $10, $1B, $0A, $16, $2F, $24, $24, $24, $24, $24, $24, $24, $24
+; ;   .db $24, $16, $0E, $0A, $17, $20, $11, $12, $15, $0E, $2D, $24, $0A, $24, $17, $0E, $20, $24, $1D, $0E
+; ;   .db $0C, $11, $17, $18, $15, $18, $10, $22, $24, $24, $24, $24, $24, $0A, $19, $19, $0E, $0A, $1B, $0E
+; ;   .db $0D, $24, $0F, $1B, $18, $16, $24, $1D, $11, $0E, $24, $0E, $0A, $1C, $1D, $2D, $24, $1D, $11, $0E
+; ;   .db $24, $24, $24, $24, $24, $0D, $1F, $0D, $2F, $24, $1D, $11, $12, $1C, $24, $16, $12, $1B, $0A, $0C
+; ;   .db $1E, $15, $18, $1E, $1C, $24, $1C, $22, $1C, $1D, $0E, $16, $24, $24, $24, $24, $24, $0E, $15, $12
+; ;   .db $16, $12, $17, $0A, $1D, $0E, $0D, $24, $0A, $17, $22, $24, $1D, $22, $19, $0E, $24, $18, $0F, $24
+; ;   .db $19, $1B, $18, $0B, $15, $0E, $16, $1C, $24, $20, $11, $0E, $17, $24, $1B, $0E, $1D, $1E, $1B, $17
+; ;   .db $12, $17, $10, $24, $1D, $11, $0E, $24, $0F, $12, $15, $16, $1C, $2D, $24, $1C, $12, $17, $0C, $0E
+; ;   .db $24, $1D, $11, $0E, $22, $24, $0D, $12, $0D, $24, $17, $18, $1D, $24, $17, $0E, $0E, $0D, $24, $1D
+; ;   .db $18, $24, $0B, $0E, $24, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $20, $18, $1E, $17, $0D
+; ;   .db $2F, $24, $12, $1D, $24, $20, $0A, $1C, $24, $1D, $11, $0E, $17, $24, $1D, $11, $0A, $1D, $24, $24
+; ;   .db $24, $24, $24, $24, $24, $11, $1E, $16, $0A, $17, $12, $1D, $22, $24, $0E, $17, $1D, $0E, $1B, $0E
+; ;   .db $0D, $24, $0A, $24, $19, $0E, $1B, $12, $18, $0D, $24, $18, $0F, $24, $24, $24, $24, $24, $24, $24
+; ;   .db $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $0A, $19, $19, $0A, $1B, $0E, $17
+; ;   .db $1D, $24, $19, $0E, $0A, $0C, $0E, $24, $2F, $2F, $2F, $24, $0B, $1E, $1D, $24, $0E, $1F, $0E, $1B
+; ;   .db $22, $24, $24, $24, $24, $0C, $11, $0A, $17, $10, $0E, $24, $0A, $15, $1C, $18, $24, $0B, $1B, $12
+; ;   .db $17, $10, $1C, $24, $17, $0E, $20, $24, $19, $1B, $18, $0B, $15, $0E, $16, $1C, $24, $0A, $17, $0D
+; ;   .db $24, $0C, $11, $0A, $15, $15, $0E, $17, $10, $0E, $1C, $2D, $24, $0A, $17, $0D, $24, $0A, $15, $1D
+; ;   .db $11, $18, $1E, $10, $11, $24, $24, $24, $24, $16, $0A, $17, $22, $24, $11, $0A, $1F, $0E, $24, $0A
+; ;   .db $15, $1B, $0E, $0A, $0D, $22, $24, $0F, $18, $1B, $10, $18, $1D, $1D, $0E, $17, $24, $24, $24, $24
+; ;   .db $24, $0A, $0B, $18, $1E, $1D, $24, $1D, $11, $0E, $16, $2D, $24, $1D, $11, $0E, $22, $24, $11, $0A
+; ;   .db $1F, $0E, $24, $17, $18, $1D, $24, $24, $24, $24, $24, $24, $24, $0F, $18, $1B, $10, $18, $1D, $1D
+; ;   .db $0E, $17, $24, $0A, $0B, $18, $1E, $1D, $24, $1D, $11, $0E, $24, $0C, $15, $12, $0E, $17, $1D, $1C
+; ;   .db $2F, $24, $24, $24, $24, $20, $11, $0E, $17, $24, $17, $0E, $0E, $0D, $0E, $0D, $2D, $24, $1D, $11
+; ;   .db $0E, $22, $24, $20, $12, $15, $15, $24, $0C, $18, $16, $0E, $24, $24, $24, $24, $24, $0B, $0A, $0C
+; ;   .db $14, $2F, $24, $0A, $17, $0D, $24, $18, $17, $24, $1D, $11, $0E, $24, $1C, $1D, $1B, $0E, $0E, $1D
+; ;   .db $1C, $24, $20, $0E, $24, $24, $24, $24, $24, $20, $12, $15, $15, $24, $1C, $0E, $0E, $24, $18, $17
+; ;   .db $0C, $0E, $24, $0A, $10, $0A, $12, $17, $24, $1D, $11, $0E, $24, $0B, $15, $0A, $0D, $0E, $24, $24
+; ;   .db $24, $1B, $0E, $20, $12, $17, $0D, $0E, $1B, $1C, $2F
+
 
 ;;;;;;;;;;;;;;;;;;; NEW CODE ;;;;;;;;;;;;;;;;;;;;
 BufferToPPU:
@@ -2017,7 +2356,7 @@ BufferToPPU:
   ; JSR sound_load
 .writeContinue
   LDA letterCounter
-  CLC 
+  CLC
   ADC #$01
   STA letterCounter
   LDA letterCursor
@@ -2053,11 +2392,31 @@ BufferToPPU:
   RTS
 
 CheckDialogue:
+  LDA #$40
+  STA ppuCursorLow
+  LDA #$22
+  STA ppuCursorHigh
   LDA levelNumber
   CMP #$01
   BEQ .setDialogueOne
+  LDA levelNumber
+  CMP #$02
+  BEQ .setDialogueTwo
+  LDA levelNumber
+  CMP #$03
+  BEQ .setDialogueThree
+  LDA levelNumber
+  CMP #$04
+  BNE .checkFinale
+  JMP .setDialogueFour
+.checkFinale:
+  LDA levelNumber
+  CMP #LAST_LEVEL
+  BNE .continue
+  JMP .setFinaleTxt
+.continue:
   RTS
-.setDialogueOne
+.setDialogueOne:
   LDA #LOW(dialogueOne)
   STA currentText+0
   LDA #HIGH(dialogueOne)
@@ -2074,13 +2433,90 @@ CheckDialogue:
   STA currentTextLimit+1
   LDA #$01
   STA isDialogue
+  JMP .startDialogue
+.setDialogueTwo:
+  LDA #LOW(dialogueTwo)
+  STA currentText+0
+  LDA #HIGH(dialogueTwo)
+  STA currentText+1
+  LDA #DIALOGUE_1_LOW
+  STA currentTextSize
+  LDA #DIALOGUE_1_PAGES
+  STA currentPage
+  LDA #DIALOGUE_2_SCREENS
+  STA currentScreenAmount
+  LDA #DIALOGUE_2_LIMIT_LOW
+  STA currentTextLimit+0
+  LDA #DIALOGUE_2_LIMIT_HIGH
+  STA currentTextLimit+1
+  LDA #$01
+  STA isDialogue
+  JMP .startDialogue
+.setDialogueThree:
+  LDA #LOW(dialogueThree)
+  STA currentText+0
+  LDA #HIGH(dialogueThree)
+  STA currentText+1
+  LDA #DIALOGUE_1_LOW
+  STA currentTextSize
+  LDA #DIALOGUE_1_PAGES
+  STA currentPage
+  LDA #DIALOGUE_3_SCREENS
+  STA currentScreenAmount
+  LDA #DIALOGUE_3_LIMIT_LOW
+  STA currentTextLimit+0
+  LDA #DIALOGUE_3_LIMIT_HIGH
+  STA currentTextLimit+1
+  LDA #$01
+  STA isDialogue
+  JMP .startDialogue
+.setDialogueFour:
+  LDA #LOW(dialogueFour)
+  STA currentText+0
+  LDA #HIGH(dialogueFour)
+  STA currentText+1
+  LDA #DIALOGUE_1_LOW
+  STA currentTextSize
+  LDA #DIALOGUE_1_PAGES
+  STA currentPage
+  LDA #DIALOGUE_4_SCREENS
+  STA currentScreenAmount
+  LDA #DIALOGUE_4_LIMIT_LOW
+  STA currentTextLimit+0
+  LDA #DIALOGUE_4_LIMIT_HIGH
+  STA currentTextLimit+1
+  LDA #$01
+  STA isDialogue
+  JMP .startDialogue
+.setFinaleTxt:
+  LDA #LOW(lastText)
+  STA currentText+0
+  LDA #HIGH(lastText)
+  STA currentText+1
+  LDA #TEXTSIZE_LOW
+  STA currentTextSize
+  LDA #TEXTSIZE_PAGES
+  STA currentPage
+  LDA #TEXT_SCREENS
+  STA currentScreenAmount
+  LDA #TEXT_FINAL_LIMIT_LOW
+  STA currentTextLimit+0
+  LDA #TEXT_FINAL_LIMIT_HIGH
+  STA currentTextLimit+1
+  LDA #$80
+  STA ppuCursorLow
+  LDA #$21
+  STA ppuCursorHigh
+  LDA #$00
+  STA isDialogue
+  JMP .startDialogue
 .startDialogue:
   LDA #$00
   JSR sound_load
-  LDA #$20
-  STA ppuCursorHigh
-  LDA #$40
-  STA ppuCursorLow
+  LDA ppuCursorLow
+  STA initialTextPoint+0
+  LDA ppuCursorHigh
+  STA initialTextPoint+1
   LDA #$00
   STA letterCursor
   STA pageCursor
@@ -2101,8 +2537,14 @@ CleanSprites:
 .cleanPPULoop:
   STA PLAYERY, x
   INX
-  CPX spritesAmount
+  CPX #$30
   BNE .cleanPPULoop
+  LDX #$00
+.cleanBtns:
+  STA $0230, X
+  INX
+  CPX spritesAmount
+  BNE .cleanBtns
   RTS
 
 LoadBlackScreen:
@@ -2111,22 +2553,22 @@ LoadBlackScreen:
   STA $2006             ; write the high byte of $2000 address
   LDA #$00
   STA $2006             ; write the low byte of $2000 address
-  
+
   LDX #$00            ; start at pointer + 0
   LDY #$00
 .initialOutsideLoop:
-  
+
 .initialInsideLoop:
   LDA #$24  ; copy one background byte from address in pointer plus Y
   STA $2007           ; this runs 256 * 4 times
-  
+
   INY                 ; inside loop counter
   CPY #$00
-  BNE .initialInsideLoop      ; run the inside loop 256 times before continuing down  
+  BNE .initialInsideLoop      ; run the inside loop 256 times before continuing down
   INX
   CPX #$04
   BNE .initialOutsideLoop     ; run the outside loop 256 times before continuing down
-  
+
   ;; write attributes, in this case black and white (3rd palette)
   LDA $2002             ; read PPU status to reset the high/low latch
   LDA #$23
@@ -2155,19 +2597,57 @@ DrawDialogueFace:
   LDA dialogueFacePlayer, y        ; load data from address (sprites +  x)
   STA $0200, y          ; store into RAM address ($0200 + x)
   INY                   ; X = X + 1
-  CPY #$18     ; Compare X to hex $10, decimal
+  CPY #$40     ; Compare X to hex $10, decimal
   BNE .loadFace
-  RTS 
+  JSR DrawDialogueLines
+  RTS
+
+DrawDialogueLines:
+  LDA $2002             ; read PPU status to reset the high/low latch
+  LDA #$22
+  STA $2006             ; write the high byte of $2000 address
+  LDA #$20
+  STA $2006             ; write the low byte of $2000 address
+  LDY #$00
+.lineLoop:
+  LDA #$E4
+  STA $2007
+  INY
+  CPY #$20
+  BNE .lineLoop
+  LDA $2002             ; read PPU status to reset the high/low latch
+  LDA #$23
+  STA $2006             ; write the high byte of $2000 address
+  LDA #$00
+  STA $2006
+  LDY #$00
+.bottomLineLoop:
+  LDA #$E4
+  STA $2007
+  INY
+  CPY #$20
+  BNE .bottomLineLoop
+  RTS
 
 dialogueFacePlayer:
     ;vert tile attr horiz
     ;BR 1 full body
-  .db $73, $52, $02, $64
-  .db $73, $53, $02, $6C
-  .db $6B, $62, $02, $64
-  .db $6B, $63, $02, $6C
-  .db $63, $72, $02, $64
-  .db $63, $73, $02, $6C
+  .db $63, $08, $02, $6C
+  .db $63, $09, $02, $74
+  .db $63, $0A, $02, $7C
+  .db $63, $0B, $02, $84
+  .db $6B, $18, $02, $6C
+  .db $6B, $19, $02, $74
+  .db $6B, $1A, $02, $7C
+  .db $6B, $1B, $02, $84
+  .db $73, $28, $02, $6C
+  .db $73, $29, $02, $74
+  .db $73, $2A, $02, $7C
+  .db $73, $2B, $02, $84
+  .db $7B, $38, $02, $6C
+  .db $7B, $39, $02, $74
+  .db $7B, $3A, $02, $7C
+  .db $7B, $3B, $02, $84
 
 Bankswitch:
   TAX ;;copy A into X
@@ -2228,7 +2708,7 @@ bglvl05:
   incbin "lvl5.nam"
 
 bglvl06:
-  incbin "bladeRewinderslvl01v2.nam"
+  incbin "bladerewindertest.nam"
 
 palette:
   .db $0F,$29,$01,$25,  $0F,$36,$17,$0F,  $0F,$05,$16,$26,  $0F,$20,$00,$0F   ;;background palette
@@ -2355,7 +2835,7 @@ palette:
 ;   .db $67, $17, $01, $7A
 
 blocksTotalPerLvl: ;no need to multiply, I'm jumping over extra values
-  .db $05, $0A, $0D, $05, $08, $05, $05
+  .db $05, $0A, $0D, $05, $08, $09
 
 blocksLvl1:
       ;x   y
@@ -2366,7 +2846,7 @@ blocksLvl1:
   .db $02, $05
 
 blocksLvl2:
-  .db $03, $03  
+  .db $03, $03
   .db $02, $02
   ; .db $03, $02, $6C, $83
   .db $04, $06
@@ -2417,11 +2897,21 @@ blocksLvl5:
 
 blocksLvl6:
       ;x   y
+  ; .db $01, $04
+  ; .db $02, $04
+  ; .db $05, $04
+  ; .db $06, $04
+  .db $02, $02
   .db $05, $02
-  .db $02, $05
-  .db $03, $06
   .db $04, $04
-  .db $05, $05
+  ; .db $02, $04
+  ; .db $01, $05
+  .db $01, $06
+  .db $02, $06
+  .db $03, $06
+  .db $05, $06
+  .db $06, $06
+  .db $05, $04
 
 bladeRewindersTotalPerLvl:
   .db $01, $01, $01, $01, $01, $01
@@ -2449,7 +2939,8 @@ bladeRewindersLvl5:
 
 bladeRewindersLvl6:
   ; coorX, coorY, sprX, sprY
-  .db $06, $06, $69, $53
+  .db $06, $05, $59, $5B
+  ;.db $01, $06, $B9, $7B
 
 initialPlayerPosLvl1:
   ; coorx. coory, X, Y
@@ -2480,7 +2971,7 @@ exitsPosLvl5:
 
 exitsPosLvl6:
   ; X, Y
-  .db $06, $06
+  .db $04, $07
 
 buttonsPerLevelTotal:
   .db $01, $01, $01, $01, $01, $01
@@ -2507,7 +2998,7 @@ buttonsLvl5:
 
 buttonsLvl6:
   ; X, Y, type (1=pause, 2=rewind, 3=exit?)
-  .db $03, $03, $01
+  .db $02, $04, $02
 
 initialScreenPointers:
   ; .dw logoScreen
@@ -2515,10 +3006,155 @@ initialScreenPointers:
   ; .dw intro1
   .dw titleScreen
   .dw titleScreen
-  .dw titleScreen
+  ; .dw titleScreen
 
 ; introTextPointers:
 ;   .dw intro1
+
+;-- fourth bank
+  .bank 3
+  .org $E000
+
+spritesLvl45:
+  .db $67, $04, $01, $92 ; exit
+  .db $67, $05, $01, $9A
+  .db $67, $06, $01, $A2
+  .db $67, $07, $01, $AA
+  .db $6F, $14, $01, $92
+  .db $6F, $15, $01, $9A
+  .db $6F, $16, $01, $A2
+  .db $6F, $17, $01, $AA
+  .db $98, $20, $01, $32 ; pause btn
+  .db $98, $21, $01, $3A
+  .db $98, $22, $01, $42
+  .db $98, $23, $01, $4A
+  .db $A0, $30, $01, $32
+  .db $A0, $31, $01, $3A
+  .db $A0, $32, $01, $42
+  .db $A0, $33, $01, $4A
+
+spritesLvl4:
+  .db $67, $04, $01, $72 ; exit
+  .db $67, $05, $01, $7A
+  .db $67, $06, $01, $82
+  .db $67, $07, $01, $8A
+  .db $6F, $14, $01, $72
+  .db $6F, $15, $01, $7A
+  .db $6F, $16, $01, $82
+  .db $6F, $17, $01, $8A
+  .db $98, $20, $01, $32 ; pause btn
+  .db $98, $21, $01, $3A
+  .db $98, $22, $01, $42
+  .db $98, $23, $01, $4A
+  .db $A0, $30, $01, $32
+  .db $A0, $31, $01, $3A
+  .db $A0, $32, $01, $42
+  .db $A0, $33, $01, $4A
+
+spritesCharacters:
+     ;vert tile attr horiz
+  ;player
+  .db $80, $50, $03, $80
+  .db $80, $51, $03, $88
+  .db $88, $60, $03, $80
+  .db $88, $61, $03, $88
+  .db $90, $70, $03, $80
+  .db $90, $71, $03, $88
+  ;BR 1 full body
+  .db $73, $52, $02, $64
+  .db $73, $53, $02, $6C
+  .db $6B, $62, $02, $64
+  .db $6B, $63, $02, $6C
+  .db $63, $72, $02, $64
+  .db $63, $73, $02, $6C
+
+spritesLvl33:
+  .db $67, $04, $01, $92 ; exit
+  .db $67, $05, $01, $9A
+  .db $67, $06, $01, $A2
+  .db $67, $07, $01, $AA
+  .db $6F, $14, $01, $92
+  .db $6F, $15, $01, $9A
+  .db $6F, $16, $01, $A2
+  .db $6F, $17, $01, $AA
+  .db $98, $20, $01, $32 ; pause btn
+  .db $98, $21, $01, $3A
+  .db $98, $22, $01, $42
+  .db $98, $23, $01, $4A
+  .db $A0, $30, $01, $32
+  .db $A0, $31, $01, $3A
+  .db $A0, $32, $01, $42
+  .db $A0, $33, $01, $4A
+
+spritesLvl55:
+  .db $67, $04, $01, $92 ; exit
+  .db $67, $05, $01, $9A
+  .db $67, $06, $01, $A2
+  .db $67, $07, $01, $AA
+  .db $6F, $14, $01, $92
+  .db $6F, $15, $01, $9A
+  .db $6F, $16, $01, $A2
+  .db $6F, $17, $01, $AA
+  .db $98, $20, $01, $32 ; pause btn
+  .db $98, $21, $01, $3A
+  .db $98, $22, $01, $42
+  .db $98, $23, $01, $4A
+  .db $A0, $30, $01, $32
+  .db $A0, $31, $01, $3A
+  .db $A0, $32, $01, $42
+  .db $A0, $33, $01, $4A
+
+spritesLvl5:
+  .db $77, $04, $01, $B2 ; exit
+  .db $77, $05, $01, $BA
+  .db $77, $06, $01, $C2
+  .db $77, $07, $01, $CA
+  .db $7F, $14, $01, $B2
+  .db $7F, $15, $01, $BA
+  .db $7F, $16, $01, $C2
+  .db $7F, $17, $01, $CA
+  .db $88, $20, $01, $12 ; pause btn
+  .db $88, $21, $01, $1A
+  .db $88, $22, $01, $22
+  .db $88, $23, $01, $2A
+  .db $90, $30, $01, $12
+  .db $90, $31, $01, $1A
+  .db $90, $32, $01, $22
+  .db $90, $33, $01, $2A
+
+spritesLvl6:
+  .db $67, $04, $01, $92 ; exit
+  .db $67, $05, $01, $9A
+  .db $67, $06, $01, $A2
+  .db $67, $07, $01, $AA
+  .db $6F, $14, $01, $92
+  .db $6F, $15, $01, $9A
+  .db $6F, $16, $01, $A2
+  .db $6F, $17, $01, $AA
+  .db $90, $00, $01, $82 ; pause btn
+  .db $90, $01, $01, $8A
+  .db $90, $02, $01, $92
+  .db $90, $03, $01, $9A
+  .db $98, $10, $01, $82
+  .db $98, $11, $01, $8A
+  .db $98, $12, $01, $92
+  .db $98, $13, $01, $9A
+
+; spritesPointersTwo:
+;   .dw spritesLvl4
+;   .dw spritesLvl5
+;   .dw spritesLvl6
+
+; spritesPointers:
+;   .dw spritesLvl1
+;   .dw spritesLvl2
+;   .dw spritesLvl3
+;   .dw spritesLvl4
+;   .dw spritesLvl5
+;   .dw spritesLvl6
+;   .dw spritesLvl6
+;   .dw spritesLvl6
+
 
 bgLevelsPointers:
   .dw bglvl01
@@ -2526,7 +3162,7 @@ bgLevelsPointers:
   .dw bglvl03
   .dw bglvl04
   .dw bglvl05
-  ;.dw bglvl06
+  .dw bglvl06
 
 blocksPointers:
   .dw blocksLvl1
@@ -2578,9 +3214,9 @@ buttonsPositions:
 ;   ; .db $18, $17, $24, $0A, $24, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $1F, $18, $15, $1E, $1D, $12, $18, $17, $0A, $1B, $22, $24, $1D, $0E, $0C, $11, $17, $18, $15, $18, $10, $22, $24, $0C, $0A, $15, $15
 ;   ; .db $0E, $0D, $24, $1D, $11, $0E, $24, $1F, $11, $1C, $2F
 ;   .db $24, $12, $17, $24, $1D, $11, $0E, $24, $09, $00, $1C, $24, $16, $18, $1F, $12, $0E, $1C, $24, $20, $0E, $1B, $0E, $24, $1D, $11, $0E, $24, $24, $24, $24, $24, $24, $0E, $17, $1D, $0E, $1B, $1D, $0A, $12, $17, $16, $0E, $17, $1D, $24, $0F, $12, $1B, $1C, $1D, $24, $0C, $11, $18, $12, $0C, $0E, $2F, $24, $24
-;   .db $24, $24, $24, $16, $18, $1F, $12, $0E, $1C, $24, $20, $0E, $1B, $0E, $24, $1C, $1D, $18, $1B, $0E, $0D, $24, $18, $17, $24, $0A, $24, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $1F, $18, $15, $1E, $1D, $12, $18, $17, $0A, $1B, $22, $24, $1D, $0E, $0C, $11, $17, $18, $15, $18, $10, $22, $24, $0C, $0A 
-;   .db $15, $15, $0E, $0D, $24, $1D, $11, $0E, $24, $1F, $11, $1C, $2F, $24, $0E, $15, $24, $0A, $1E, $16, $0E, $17, $1D, $18, $24, $0D, $0E, $24, $0D, $0E, $16, $0A, $17, $0D, $0A, $24, $24, $10, $0E, $17, $0E, $1B, $18, $24, $1E, $17, $0A, $24, $17, $0E, $0C, $0E, $1C, $12, $0D, $0A, $0D, $24, $24, $24, $24, $24 
-;   .db $24, $24, $24, $24, $24, $24, $24, $12, $16, $19, $1B, $0E, $1F, $12, $1C, $1D, $0A, $2F, $24, $17, $18, $24, $0E, $1B, $0A, $24, $19, $18, $1C, $12, $0B, $15, $0E, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $1B, $24, $15, $0A, $1C, $24, $19, $0E, $15, $12, $0C, $1E, $15, $0A, $1C 
+;   .db $24, $24, $24, $16, $18, $1F, $12, $0E, $1C, $24, $20, $0E, $1B, $0E, $24, $1C, $1D, $18, $1B, $0E, $0D, $24, $18, $17, $24, $0A, $24, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $1F, $18, $15, $1E, $1D, $12, $18, $17, $0A, $1B, $22, $24, $1D, $0E, $0C, $11, $17, $18, $15, $18, $10, $22, $24, $0C, $0A
+;   .db $15, $15, $0E, $0D, $24, $1D, $11, $0E, $24, $1F, $11, $1C, $2F, $24, $0E, $15, $24, $0A, $1E, $16, $0E, $17, $1D, $18, $24, $0D, $0E, $24, $0D, $0E, $16, $0A, $17, $0D, $0A, $24, $24, $10, $0E, $17, $0E, $1B, $18, $24, $1E, $17, $0A, $24, $17, $0E, $0C, $0E, $1C, $12, $0D, $0A, $0D, $24, $24, $24, $24, $24
+;   .db $24, $24, $24, $24, $24, $24, $24, $12, $16, $19, $1B, $0E, $1F, $12, $1C, $1D, $0A, $2F, $24, $17, $18, $24, $0E, $1B, $0A, $24, $19, $18, $1C, $12, $0B, $15, $0E, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $1B, $24, $15, $0A, $1C, $24, $19, $0E, $15, $12, $0C, $1E, $15, $0A, $1C
 ;   .db $24, $0A, $24, $24, $24, $24, $24, $24, $24, $1D, $12, $0E, $16, $19, $18, $2F, $24, $0F, $1E, $0E, $24, $0E, $17, $1D, $18, $17, $0C, $0E, $1C, $24, $0C, $1E, $0A, $17, $0D, $18, $24, $0E, $15, $24, $24, $0C, $18, $16, $12, $1D, $0E, $24, $0D, $0E, $24, $1F, $12, $0D, $0E, $18, $24, $1C, $1D, $18, $1B, $0E, $1C
 ;   .db $24, $24, $24, $24, $24, $24, $24, $24, $24, $24, $0D, $0E, $1D, $0E, $1B, $16, $12, $17, $18, $24, $15, $0A, $24, $15, $0E, $22, $24, $0D, $0E, $15, $24, $19, $1B, $0E, $24, $24, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $0D, $18, $2F, $24, $0C, $0A, $0D, $0A, $24, $0C, $15, $12, $0E
 ;   .db $17, $1D, $0E, $24, $1D, $0E, $17, $12, $0A, $24, $24, $1A, $1E, $0E, $24, $0D, $0E, $1F, $18, $15, $1F, $0E, $1B, $24, $15, $0A, $1C, $24, $19, $0E, $15, $12, $0C, $1E, $15, $0A, $1C, $24, $24, $24, $24, $24, $24, $1B, $0E, $0B, $18, $0B, $12, $17, $0A, $0D, $0A, $1C, $2F, $24, $01, $02, $03, $0F, $1E, $0E, $24
@@ -2596,19 +3232,19 @@ buttonsPositions:
 
 
   .org $FFFA     ;first of the three vectors starts here
-  .dw NMI        ;when an NMI happens (once per frame if enabled) the 
+  .dw NMI        ;when an NMI happens (once per frame if enabled) the
                    ;processor will jump to the label NMI:
   .dw RESET      ;when the processor first turns on or is reset, it will jump
                    ;to the label RESET:
   .dw 0          ;external interrupt IRQ is not used in this tutorial
-  
-  
-;;;;;;;;;;;;;;  
-  
-  .bank 2
+
+
+;;;;;;;;;;;;;;
+
+  .bank 4
   .org $0000
   .incbin "mario.chr"
-  
-  .bank 3
+
+  .bank 5
   .org $0000
   .incbin "bladerewinderV2.chr"   ;includes 8KB graphics file from SMB1

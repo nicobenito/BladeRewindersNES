@@ -36,15 +36,22 @@ const letters = {
     6: "06",
     7: "07",
     8: "08",
-    9: "09"
+    9: "09",
+    ",": "2D",
+    "?": "2C",
+    "!": "2B",
+    "-": "28",
 };
 
 ////// intro text 1 - 751 buen numero para completar 1 pantalla con txt.
-// const message = `during the 80s the video store was created and for a long time they offered entertainment by renting movies in a revolutionary technology called vhs. a decade later renting movies was an everyday thing. the seemingly endless demand for vhs left video store companies with no time to rewind their movies. this sparked protests and riots for almost a year. to end this conflict the pre rewind law was created forcing customers to rewind films before returning them. a note was added every time a customer did not rewind a movie and on the third note their video store card was removed. many resisted returning their cards so a new force was established to enforce this law ... the blade rewinders.`;
+///const message = `During the 80s, the video store was created, and for a long time they offered entertainment by renting movies in a revolutionary technology called VHS. A decade later, renting movies was an everyday thing. The seemingly endless demand for VHS left movie store companies with no time to rewind their movies. This sparked protests and clashes for almost a year. To end this conflict, the pre-rewind law was created, forcing customers to rewind films before returning them. A note was added every time a customer did not rewind a movie, and on the third note, their video store card was removed. Many resisted returning their cards, so a new force was established to enforce this law ... the blade rewinders.`;
 ///// dialogue 1
-const message = `hey honey i am going shopping and i thought about returning the movie we saw yesterday but i cant find it where is it ...... oh you already returned it very good. one question you rewound it right ...... when did you tell me to do it i didnt hear you say it. if i dont answer you its because i didnt listen to you. ...... well its not a problem its our second fault we just have to be more careful next time ...... our what i cant believe its the third. no no no. the blade rewinders are going to be here any minute. ...... wait i hear something outside ... dont worry i am going to make it to the video store without getting caught and rewind that movie`;
-const txtLimit = 170; // dialogue limit
-// const txtLimit = 752; // full screen txt limit
+// const message = `Houston, we have a problem! They were waiting for me! But I can see the vhs ... My precious ... I have to get my hands on that vhs. For the sake of my Saturday nights, I have to! Everything ends now! I swear on Keanu Reeves they are not going to get away with it! You against my Blade Rewinders, may the best nerd win!`;
+///// end text
+const message = 'You have rewound the movie and defeated the Blade Rewinders!'
+
+//const txtLimit = 170; // dialogue limit
+const txtLimit = 752; // full screen txt limit
 
 const stringToHex = () => {
     /*
@@ -126,11 +133,12 @@ const stringToHex = () => {
             }            
         }
     });
-
+    // if extra or missing lines, toggle this code below
+    ///////////
     lineArray.forEach(element => {
         resultArray.push(element);
     });
-
+    ///////////
     let resultMessage = "";
     resultArray.forEach(element => {
         resultMessage += element;
@@ -142,7 +150,7 @@ const stringToHex = () => {
         //     stringHex += "\n.db ";
         // }
         stringHex += '$'
-        stringHex += letters[resultMessage[i]];
+        stringHex += letters[resultMessage[i].toLowerCase()];
         stringHex += ', '
     }
     // console.log(stringHex);
