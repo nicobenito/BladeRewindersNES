@@ -118,6 +118,8 @@ initialTextPoint .rs 2
 sound_ptr .rs 2
 jmp_ptr .rs 2           ;a pointer variable for indirect jumps
 current_song .rs 1
+; hack
+oneTimeDialogue .rs 1
 
 
 ;; DECLARE SOME CONSTANTS HERE
@@ -144,13 +146,13 @@ PPU_BUFFER     = $0400
 PAUSEDBTN      = $01
 REWINDBTN      = $02
 
-TEXT_SPEED = $01
+TEXT_SPEED = $04
 ; text intro
 TEXTSIZE_LOW   = $F0 ;low byte page/screen limit
 TEXTSIZE_PAGES  = $02 ;high byte page/screen limit, if limit is 1byte long its 00
 TEXT_SCREENS = $02
 TEXT_LIMIT_LOW = $1C
-TEXT_LIMIT_HIGH = $00 ; original $03
+TEXT_LIMIT_HIGH = $03 ; original $03
 
 ; dialogue one
 DIALOGUE_1_LOW = $AA
@@ -211,6 +213,17 @@ LAST_LEVEL = $06
   .db $98, $11, $01, $2A
   .db $98, $12, $01, $32
   .db $98, $13, $01, $3A
+
+CheckFirstDialogue:
+; hack for dialogue after intro on first lvl
+  LDA oneTimeDialogue
+  CMP #$00
+  BNE .continue
+  LDA #$01
+  STA oneTimeDialogue
+  JSR CheckDialogue
+.continue:
+  RTS
 
 ;----- second 8k bank of PRG-ROM
   .bank 1
@@ -279,7 +292,7 @@ LoadPalettesLoop:
   BNE LoadPalettesLoop  ; Branch to LoadPalettesLoop if compare was Not Equal to zero
                         ; if compare was equal to 32, keep going down
 
-  LDA #$04 ;lvl number - 1
+  LDA #$00 ;lvl number - 1
   STA levelNumber
   LDA #$00
   STA letterCursor
@@ -1518,10 +1531,13 @@ LoadNxtLevel:
   STA levelNumber
   JSR CheckDialogue
 ResetLevel:
+  JSR CheckFirstDialogue
   ; check if game is done, if it is, jmp to reset? or go to reset routine.
   LDA levelNumber
-  CMP #LAST_LEVEL; <-- should be last lvl +1
+  CMP #LAST_LEVEL ; <-- should be last lvl +1
   BNE .continueReset
+  LDA #$00 ;;put new bank to use into A
+  JSR Bankswitch 
   JMP RESET
 .continueReset:
   LDA #$00
@@ -1586,6 +1602,7 @@ ReadController1Loop:
 ;   RTS
 
 LoadLevel:
+  JSR CleanSprites
   lda levelNumber ;gets the number of the current level
 	asl A ;multiplies it by 2 since each pointer is 2 bytes
 	tax ;use it as an index
@@ -2397,16 +2414,16 @@ CheckDialogue:
   LDA #$22
   STA ppuCursorHigh
   LDA levelNumber
-  CMP #$01
+  CMP #$00
   BEQ .setDialogueOne
   LDA levelNumber
   CMP #$02
   BEQ .setDialogueTwo
   LDA levelNumber
-  CMP #$03
+  CMP #$04
   BEQ .setDialogueThree
   LDA levelNumber
-  CMP #$04
+  CMP #$05
   BNE .checkFinale
   JMP .setDialogueFour
 .checkFinale:
@@ -2537,7 +2554,7 @@ CleanSprites:
 .cleanPPULoop:
   STA PLAYERY, x
   INX
-  CPX #$30
+  CPX #$30 ;char and br sprites
   BNE .cleanPPULoop
   LDX #$00
 .cleanBtns:
@@ -2708,7 +2725,7 @@ bglvl05:
   incbin "lvl5.nam"
 
 bglvl06:
-  incbin "bladerewindertest.nam"
+  incbin "bladeRewinderslvl06.nam"
 
 palette:
   .db $0F,$29,$01,$25,  $0F,$24,$17,$0F,  $0F,$05,$16,$26,  $0F,$20,$00,$0F   ;;background palette
