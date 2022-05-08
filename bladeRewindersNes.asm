@@ -134,11 +134,11 @@ PLAYERX        = $0203
 PLAYERHMOV     = $10
 PLAYERYMOV     = $08
 
-BRONEY         = $0218
-BRONEX         = $021B
+BRONEY         = $0208
+BRONEX         = $020B
 BRTWOY         = $021C
 BRTWOX         = $021F
-CANTMOVE       = $10
+CANTMOVE       = $30
 
 PPU_BUFFER     = $0400
 
@@ -146,7 +146,7 @@ PPU_BUFFER     = $0400
 PAUSEDBTN      = $01
 REWINDBTN      = $02
 
-TEXT_SPEED = $04
+TEXT_SPEED = $01
 ; text intro
 TEXTSIZE_LOW   = $F0 ;low byte page/screen limit
 TEXTSIZE_PAGES  = $02 ;high byte page/screen limit, if limit is 1byte long its 00
@@ -197,22 +197,24 @@ LAST_LEVEL = $06
   .include "sound_engine.asm"
 
   spritesLvl3:
-  .db $7F, $04, $01, $82 ; exit
-  .db $7F, $05, $01, $8A
-  .db $7F, $06, $01, $92
-  .db $7F, $07, $01, $9A
-  .db $87, $14, $01, $82
-  .db $87, $15, $01, $8A
-  .db $87, $16, $01, $92
-  .db $87, $17, $01, $9A
-  .db $90, $00, $01, $22 ; rewind btn
-  .db $90, $01, $01, $2A
-  .db $90, $02, $01, $32
-  .db $90, $03, $01, $3A
-  .db $98, $10, $01, $22
-  .db $98, $11, $01, $2A
-  .db $98, $12, $01, $32
-  .db $98, $13, $01, $3A
+  .db $82, $01, $00, $99
+  .db $8A, $11, $00, $99
+  ; .db $7F, $04, $01, $82 ; exit
+  ; .db $7F, $05, $01, $8A
+  ; .db $7F, $06, $01, $92
+  ; .db $7F, $07, $01, $9A
+  ; .db $87, $14, $01, $82
+  ; .db $87, $15, $01, $8A
+  ; .db $87, $16, $01, $92
+  ; .db $87, $17, $01, $9A
+  ; .db $90, $00, $01, $22 ; rewind btn
+  ; .db $90, $01, $01, $2A
+  ; .db $90, $02, $01, $32
+  ; .db $90, $03, $01, $3A
+  ; .db $98, $10, $01, $22
+  ; .db $98, $11, $01, $2A
+  ; .db $98, $12, $01, $32
+  ; .db $98, $13, $01, $3A
 
 CheckFirstDialogue:
 ; hack for dialogue after intro on first lvl
@@ -292,7 +294,7 @@ LoadPalettesLoop:
   BNE LoadPalettesLoop  ; Branch to LoadPalettesLoop if compare was Not Equal to zero
                         ; if compare was equal to 32, keep going down
 
-  LDA #$00 ;lvl number - 1
+  LDA #$00 ;level number - 1
   STA levelNumber
   LDA #$00
   STA letterCursor
@@ -304,15 +306,15 @@ LoadPalettesLoop:
   STA ppuCursorLow
 
   ;deactive intial screens
-  ;JSR LoadLevel
+  JSR LoadLevel
 
   ; LOADING TITLE SCREEN
-  LDA #$00
-  STA initialBGNumber
-  JSR LoadBlackScreen
+  ; LDA #$00
+  ; STA initialBGNumber
+  ; JSR LoadBlackScreen
 
   ; set screen player position
-  LDA #$A3
+  LDA #$B7
   STA posy
   LDA #$68
   STA posx
@@ -336,8 +338,8 @@ LoadPalettesLoop:
 
 
 ;;:Set starting game state
-  LDA #STATELOGO
-  ;LDA #STATEPLAYING
+  ; LDA #STATELOGO
+  LDA #STATEPLAYING
   STA gamestate
 
 
@@ -759,7 +761,7 @@ ReadUpBtnDone:
   STA currentCharacterCoorY
   LDA #$01
   STA currentIsPlayer
-  JSR CheckForButtons
+  ; JSR CheckForButtons ; lo comento para evitar salto de casilla. Solo sirve si se usa el rewind.
   LDA hasRewinded
   CMP #$01
   BEQ StoreMovement
@@ -835,35 +837,35 @@ UpdateCharactersSprites:
   LDY #$00
   LDA charPosX
   STA [charSpriteX], Y
-  LDY #$08
-  STA [charSpriteX], Y
-  LDY #$10
-  STA [charSpriteX], Y
-  CLC
-  ADC #$08
   LDY #$04
   STA [charSpriteX], Y
-  LDY #$0C
-  STA [charSpriteX], Y
-  LDY #$14
-  STA [charSpriteX], Y
+  ; LDY #$10
+  ; STA [charSpriteX], Y
+  ; CLC
+  ; ADC #$08
+  ; LDY #$04
+  ; STA [charSpriteX], Y
+  ; LDY #$0C
+  ; STA [charSpriteX], Y
+  ; LDY #$14
+  ; STA [charSpriteX], Y
   LDA charPosY
   LDY #$00
   STA [charSpriteY], Y
+  ; STA [charSpriteY], Y
+  CLC
+  ADC #$08
   LDY #$04
+  ; LDY #$08
   STA [charSpriteY], Y
-  CLC
-  ADC #$08
-  LDY #$08
-  STA [charSpriteY], Y
-  LDY #$0C
-  STA [charSpriteY], Y
-  CLC
-  ADC #$08
-  LDY #$10
-  STA [charSpriteY], Y
-  LDY #$14
-  STA [charSpriteY], Y
+  ; LDY #$0C
+  ; STA [charSpriteY], Y
+  ; CLC
+  ; ADC #$08
+  ; LDY #$10
+  ; STA [charSpriteY], Y
+  ; LDY #$14
+  ; STA [charSpriteY], Y
   RTS
 
 ; DrawScore:
@@ -967,7 +969,7 @@ BlockLoopContinue:
   INY
   CPX blocksAmount
   BNE BlockLoop
-  JSR CheckForBRs
+  ;JSR CheckForBRs
   RTS
 
 CheckForBRs:
@@ -995,11 +997,14 @@ BrContinue:
 CheckBRDone:
   RTS
 
-CheckForButtons:
+CheckForButtons: ; parece q este metodo es el q hace saltar casillas de mas en ciertos movimientos cuando lo llama el player
   LDX #$00
   LDY #$00
   STX currentCharacterPaused
 CheckButtonsLoop:
+  LDA buttonsAmount
+  CMP #$00
+  BEQ ButtonsLoopDone
   INX
   LDA [levelButtons], Y
   INY
@@ -1040,8 +1045,9 @@ CheckRewindBtn:
 ButtonsLoopContinue:
   INY
   INY
+  CLC
   CPX buttonsAmount
-  BNE CheckButtonsLoop
+  BCS CheckButtonsLoop
 ButtonsLoopDone:
   RTS
 
@@ -1178,7 +1184,7 @@ CalculateMoveUp:
   LDA brCurrentCoorX
   STA xone
   JSR CheckNextPositionBR
-  LDX CANTMOVE
+  LDX #CANTMOVE
   STX brPossibleUp
   LDA canMove
   CMP #$01
@@ -1195,7 +1201,7 @@ CalculateMoveLeft:
   LDA brCurrentCoorY
   STA yone
   JSR CheckNextPositionBR
-  LDX CANTMOVE
+  LDX #CANTMOVE
   STX brPossibleLeft
   LDA canMove
   CMP #$01
@@ -1213,7 +1219,7 @@ CalculateMoveDown:
   LDA brCurrentCoorX
   STA xone
   JSR CheckNextPositionBR
-  LDX CANTMOVE
+  LDX #CANTMOVE
   STX brPossibleDown
   LDA canMove
   CMP #$01
@@ -1232,7 +1238,7 @@ CalculateMoveRight:
   LDA brCurrentCoorY
   STA yone
   JSR CheckNextPositionBR
-  LDX CANTMOVE
+  LDX #CANTMOVE
   STX brPossibleRight
   LDA canMove
   CMP #$01
@@ -1242,7 +1248,7 @@ CalculateMoveRight:
   STA brPossibleRight
 SetComparing:
   ; save up as minor
-  LDA brPossibleUp
+  LDA brPossibleUp ;este valor se pone en 0 por cierto motivo al estar bloqueado el camino.
   STA brSmallerDistance
 StartComparing:
   ;TEST #####
@@ -1529,9 +1535,10 @@ LoadNxtLevel:
   CLC
   ADC #$01
   STA levelNumber
-  JSR CheckDialogue
+  ; Dialog turn off
+  ; JSR CheckDialogue
 ResetLevel:
-  JSR CheckFirstDialogue
+  ; JSR CheckFirstDialogue
   ; check if game is done, if it is, jmp to reset? or go to reset routine.
   LDA levelNumber
   CMP #LAST_LEVEL ; <-- should be last lvl +1
@@ -1710,7 +1717,7 @@ LoadSpritesLoop:
   LDA spritesCharacters, y        ; load data from address (sprites +  x)
   STA $0200, y          ; store into RAM address ($0200 + x)
   INY                   ; X = X + 1
-  CPY #$30     ; Compare X to hex $10, decimal
+  CPY #$10     ; Compare X to hex $10, decimal 16
   BNE LoadSpritesLoop   ; Branch to LoadSpritesLoop if compare was Not Equal to zero
   LDY #$00
 .loadSpritesButtons:
@@ -1937,7 +1944,7 @@ Result:
 ; 	RTS
 ;;;;;; level sprites data
 spritesTotalPerLvl: ;value multiplied by four because of attributes
-  .db $40, $40, $40, $20, $40, $40
+  .db $08, $08, $08, $08, $08, $08
 
 ; spritesLvl1:
 ;      ;vert tile attr horiz
@@ -2203,40 +2210,45 @@ spritesLvl22:
 
 
 spritesLvl1:
-  .db $5F, $04, $01, $62 ; exit
-  .db $5F, $05, $01, $6A
-  .db $5F, $06, $01, $72
-  .db $5F, $07, $01, $7A
-  .db $67, $14, $01, $62
-  .db $67, $15, $01, $6A
-  .db $67, $16, $01, $72
-  .db $67, $17, $01, $7A
-  .db $90, $20, $01, $62 ; pause btn
-  .db $90, $21, $01, $6A
-  .db $90, $22, $01, $72
-  .db $90, $23, $01, $7A
-  .db $98, $30, $01, $62
-  .db $98, $31, $01, $6A
-  .db $98, $32, $01, $72
-  .db $98, $33, $01, $7A
+  ; larissa
+  .db $61, $01, $00, $79
+  .db $69, $11, $00, $79
+  ; .db $5F, $04, $01, $62 ; exit
+  ; .db $5F, $05, $01, $6A
+  ; .db $5F, $06, $01, $72
+  ; .db $5F, $07, $01, $7A
+  ; .db $67, $14, $01, $62
+  ; .db $67, $15, $01, $6A
+  ; .db $67, $16, $01, $72
+  ; .db $67, $17, $01, $7A
+  ; .db $90, $20, $01, $62 ; pause btn
+  ; .db $90, $21, $01, $6A
+  ; .db $90, $22, $01, $72
+  ; .db $90, $23, $01, $7A
+  ; .db $98, $30, $01, $62
+  ; .db $98, $31, $01, $6A
+  ; .db $98, $32, $01, $72
+  ; .db $98, $33, $01, $7A
 
 spritesLvl2:
-  .db $67, $04, $01, $92 ; exit
-  .db $67, $05, $01, $9A
-  .db $67, $06, $01, $A2
-  .db $67, $07, $01, $AA
-  .db $6F, $14, $01, $92
-  .db $6F, $15, $01, $9A
-  .db $6F, $16, $01, $A2
-  .db $6F, $17, $01, $AA
-  .db $98, $20, $01, $32 ; pause btn
-  .db $98, $21, $01, $3A
-  .db $98, $22, $01, $42
-  .db $98, $23, $01, $4A
-  .db $A0, $30, $01, $32
-  .db $A0, $31, $01, $3A
-  .db $A0, $32, $01, $42
-  .db $A0, $33, $01, $4A
+  .db $6A, $01, $00, $89
+  .db $72, $11, $00, $89
+  ; .db $67, $04, $01, $92 ; exit
+  ; .db $67, $05, $01, $9A
+  ; .db $67, $06, $01, $A2
+  ; .db $67, $07, $01, $AA
+  ; .db $6F, $14, $01, $92
+  ; .db $6F, $15, $01, $9A
+  ; .db $6F, $16, $01, $A2
+  ; .db $6F, $17, $01, $AA
+  ; .db $98, $20, $01, $32 ; pause btn
+  ; .db $98, $21, $01, $3A
+  ; .db $98, $22, $01, $42
+  ; .db $98, $23, $01, $4A
+  ; .db $A0, $30, $01, $32
+  ; .db $A0, $31, $01, $3A
+  ; .db $A0, $32, $01, $42
+  ; .db $A0, $33, $01, $4A
 
 
 ;;;;;;;;;;;;;
@@ -2554,7 +2566,7 @@ CleanSprites:
 .cleanPPULoop:
   STA PLAYERY, x
   INX
-  CPX #$30 ;char and br sprites
+  CPX #$10 ;char and br sprites
   BNE .cleanPPULoop
   LDX #$00
 .cleanBtns:
@@ -2710,26 +2722,26 @@ titleScreen:
 ;   incbin "intro1.nam"
 
 bglvl01:
-  incbin "bladeRewinderslvl01v2.nam"
+  incbin "maps\ale\test1.nam"
 
 bglvl02:
-  incbin "lvl2.nam"
+  incbin "maps\ale\test2.nam"
 
 bglvl03:
-  incbin "lvl3.nam"
+  incbin "maps\ale\test3.nam"
 
 bglvl04:
-  incbin "lvl4.nam"
+  incbin "maps\ale\test4.nam"
 
 bglvl05:
-  incbin "lvl5.nam"
+  incbin "maps\ale\test5.nam"
 
 bglvl06:
-  incbin "bladeRewinderslvl06.nam"
+  incbin "maps\ale\test6.nam"
 
 palette:
-  .db $0F,$29,$01,$25,  $0F,$24,$17,$0F,  $0F,$05,$16,$26,  $0F,$20,$00,$0F   ;;background palette
-  .db $0F,$13,$23,$33,  $0F,$20,$10,$24,  $0F,$1C,$37,$16,  $0F,$1C,$37,$23   ;;sprite palette
+  .db $2B,$3D,$01,$38,  $2B,$2D,$3D,$19,  $2B,$28,$1C,$17,  $2B,$20,$3D,$0F   ;;background palette
+  .db $2B,$1C,$37,$20,  $2B,$20,$10,$24,  $2B,$1C,$37,$16,  $2B,$05,$37,$15   ;;sprite palette
 
 ; spritesLvl1:
 ;      ;vert tile attr horiz
@@ -2935,37 +2947,37 @@ bladeRewindersTotalPerLvl:
 
 bladeRewindersLvl1:
   ; coorX, coorY, sprX, sprY
-  .db $06, $06, $69, $53
+  .db $06, $06, $69, $68
   ;.db $06, $07, $7C, $5B
 
 bladeRewindersLvl2:
   ; coorX, coorY, sprX, sprY
-  .db $02, $03, $79, $8B
+  .db $02, $03, $79, $9F
 
 bladeRewindersLvl3:
   ; coorX, coorY, sprX, sprY
-  .db $01, $06, $B9, $7B
+  .db $01, $06, $B9, $8F
 
 bladeRewindersLvl4:
   ; coorX, coorY, sprX, sprY
-  .db $06, $01, $19, $7B
+  .db $06, $01, $19, $8F
 
 bladeRewindersLvl5:
   ; coorX, coorY, sprX, sprY
-  .db $05, $06, $79, $5B
+  .db $05, $06, $79, $6F
 
 bladeRewindersLvl6:
   ; coorX, coorY, sprX, sprY
-  .db $06, $05, $59, $5B
+  .db $06, $05, $59, $6F
   ;.db $01, $06, $B9, $7B
 
 initialPlayerPosLvl1:
   ; coorx. coory, X, Y
-  .db $01, $01, $68, $A3
+  .db $01, $01, $68, $B7
 
 initialPlayerPosLvl5:
   ; coorx. coory, X, Y
-  .db $02, $02, $68, $93
+  .db $02, $02, $68, $A7
 
 exitsPosLvl1:
   ; X, Y
@@ -2991,7 +3003,7 @@ exitsPosLvl6:
   .db $04, $07
 
 buttonsPerLevelTotal:
-  .db $01, $01, $01, $01, $01, $01
+  .db $01, $01, $01, $00, $01, $01
 
 buttonsLvl1:
   ; X, Y, type (1=pause, 2=rewind, 3=exit?)
@@ -3032,130 +3044,131 @@ initialScreenPointers:
   .bank 3
   .org $E000
 
-spritesLvl45:
-  .db $67, $04, $01, $92 ; exit
-  .db $67, $05, $01, $9A
-  .db $67, $06, $01, $A2
-  .db $67, $07, $01, $AA
-  .db $6F, $14, $01, $92
-  .db $6F, $15, $01, $9A
-  .db $6F, $16, $01, $A2
-  .db $6F, $17, $01, $AA
-  .db $98, $20, $01, $32 ; pause btn
-  .db $98, $21, $01, $3A
-  .db $98, $22, $01, $42
-  .db $98, $23, $01, $4A
-  .db $A0, $30, $01, $32
-  .db $A0, $31, $01, $3A
-  .db $A0, $32, $01, $42
-  .db $A0, $33, $01, $4A
+; spritesLvl45:
+;   .db $67, $04, $01, $92 ; exit
+;   .db $67, $05, $01, $9A
+;   .db $67, $06, $01, $A2
+;   .db $67, $07, $01, $AA
+;   .db $6F, $14, $01, $92
+;   .db $6F, $15, $01, $9A
+;   .db $6F, $16, $01, $A2
+;   .db $6F, $17, $01, $AA
+;   .db $98, $20, $01, $32 ; pause btn
+;   .db $98, $21, $01, $3A
+;   .db $98, $22, $01, $42
+;   .db $98, $23, $01, $4A
+;   .db $A0, $30, $01, $32
+;   .db $A0, $31, $01, $3A
+;   .db $A0, $32, $01, $42
+;   .db $A0, $33, $01, $4A
 
 spritesLvl4:
-  .db $67, $04, $01, $72 ; exit
-  .db $67, $05, $01, $7A
-  .db $67, $06, $01, $82
-  .db $67, $07, $01, $8A
-  .db $6F, $14, $01, $72
-  .db $6F, $15, $01, $7A
-  .db $6F, $16, $01, $82
-  .db $6F, $17, $01, $8A
-  .db $98, $20, $01, $32 ; pause btn
-  .db $98, $21, $01, $3A
-  .db $98, $22, $01, $42
-  .db $98, $23, $01, $4A
-  .db $A0, $30, $01, $32
-  .db $A0, $31, $01, $3A
-  .db $A0, $32, $01, $42
-  .db $A0, $33, $01, $4A
+  .db $6A, $01, $00, $89
+  .db $72, $11, $00, $89
+  ; .db $67, $04, $01, $72 ; exit
+  ; .db $67, $05, $01, $7A
+  ; .db $67, $06, $01, $82
+  ; .db $67, $07, $01, $8A
+  ; .db $6F, $14, $01, $72
+  ; .db $6F, $15, $01, $7A
+  ; .db $6F, $16, $01, $82
+  ; .db $6F, $17, $01, $8A
+  ; .db $98, $20, $01, $32 ; pause btn
+  ; .db $98, $21, $01, $3A
+  ; .db $98, $22, $01, $42
+  ; .db $98, $23, $01, $4A
+  ; .db $A0, $30, $01, $32
+  ; .db $A0, $31, $01, $3A
+  ; .db $A0, $32, $01, $42
+  ; .db $A0, $33, $01, $4A
 
 spritesCharacters:
      ;vert tile attr horiz
-  ;player
-  .db $80, $50, $03, $80
-  .db $80, $51, $03, $88
-  .db $88, $60, $03, $80
-  .db $88, $61, $03, $88
-  .db $90, $70, $03, $80
-  .db $90, $71, $03, $88
-  ;BR 1 full body
-  .db $73, $52, $02, $64
-  .db $73, $53, $02, $6C
-  .db $6B, $62, $02, $64
-  .db $6B, $63, $02, $6C
-  .db $63, $72, $02, $64
-  .db $63, $73, $02, $6C
+  ;ale
+  .db $80, $00, $03, $80
+  .db $88, $10, $03, $80
+  ;invitado
+  .db $73, $02, $02, $64
+  .db $6B, $12, $02, $64
+  ;larissa
+  ; .db $73, $01, $02, $64
+  ; .db $6B, $11, $02, $64
 
-spritesLvl33:
-  .db $67, $04, $01, $92 ; exit
-  .db $67, $05, $01, $9A
-  .db $67, $06, $01, $A2
-  .db $67, $07, $01, $AA
-  .db $6F, $14, $01, $92
-  .db $6F, $15, $01, $9A
-  .db $6F, $16, $01, $A2
-  .db $6F, $17, $01, $AA
-  .db $98, $20, $01, $32 ; pause btn
-  .db $98, $21, $01, $3A
-  .db $98, $22, $01, $42
-  .db $98, $23, $01, $4A
-  .db $A0, $30, $01, $32
-  .db $A0, $31, $01, $3A
-  .db $A0, $32, $01, $42
-  .db $A0, $33, $01, $4A
+; spritesLvl33:
+;   .db $67, $04, $01, $92 ; exit
+;   .db $67, $05, $01, $9A
+;   .db $67, $06, $01, $A2
+;   .db $67, $07, $01, $AA
+;   .db $6F, $14, $01, $92
+;   .db $6F, $15, $01, $9A
+;   .db $6F, $16, $01, $A2
+;   .db $6F, $17, $01, $AA
+;   .db $98, $20, $01, $32 ; pause btn
+;   .db $98, $21, $01, $3A
+;   .db $98, $22, $01, $42
+;   .db $98, $23, $01, $4A
+;   .db $A0, $30, $01, $32
+;   .db $A0, $31, $01, $3A
+;   .db $A0, $32, $01, $42
+;   .db $A0, $33, $01, $4A
 
-spritesLvl55:
-  .db $67, $04, $01, $92 ; exit
-  .db $67, $05, $01, $9A
-  .db $67, $06, $01, $A2
-  .db $67, $07, $01, $AA
-  .db $6F, $14, $01, $92
-  .db $6F, $15, $01, $9A
-  .db $6F, $16, $01, $A2
-  .db $6F, $17, $01, $AA
-  .db $98, $20, $01, $32 ; pause btn
-  .db $98, $21, $01, $3A
-  .db $98, $22, $01, $42
-  .db $98, $23, $01, $4A
-  .db $A0, $30, $01, $32
-  .db $A0, $31, $01, $3A
-  .db $A0, $32, $01, $42
-  .db $A0, $33, $01, $4A
+; spritesLvl55:
+;   .db $67, $04, $01, $92 ; exit
+;   .db $67, $05, $01, $9A
+;   .db $67, $06, $01, $A2
+;   .db $67, $07, $01, $AA
+;   .db $6F, $14, $01, $92
+;   .db $6F, $15, $01, $9A
+;   .db $6F, $16, $01, $A2
+;   .db $6F, $17, $01, $AA
+;   .db $98, $20, $01, $32 ; pause btn
+;   .db $98, $21, $01, $3A
+;   .db $98, $22, $01, $42
+;   .db $98, $23, $01, $4A
+;   .db $A0, $30, $01, $32
+;   .db $A0, $31, $01, $3A
+;   .db $A0, $32, $01, $42
+;   .db $A0, $33, $01, $4A
 
 spritesLvl5:
-  .db $77, $04, $01, $B2 ; exit
-  .db $77, $05, $01, $BA
-  .db $77, $06, $01, $C2
-  .db $77, $07, $01, $CA
-  .db $7F, $14, $01, $B2
-  .db $7F, $15, $01, $BA
-  .db $7F, $16, $01, $C2
-  .db $7F, $17, $01, $CA
-  .db $88, $20, $01, $12 ; pause btn
-  .db $88, $21, $01, $1A
-  .db $88, $22, $01, $22
-  .db $88, $23, $01, $2A
-  .db $90, $30, $01, $12
-  .db $90, $31, $01, $1A
-  .db $90, $32, $01, $22
-  .db $90, $33, $01, $2A
+  .db $8A, $01, $00, $C9
+  .db $92, $11, $00, $C9
+  ; .db $77, $04, $01, $B2 ; exit
+  ; .db $77, $05, $01, $BA
+  ; .db $77, $06, $01, $C2
+  ; .db $77, $07, $01, $CA
+  ; .db $7F, $14, $01, $B2
+  ; .db $7F, $15, $01, $BA
+  ; .db $7F, $16, $01, $C2
+  ; .db $7F, $17, $01, $CA
+  ; .db $88, $20, $01, $12 ; pause btn
+  ; .db $88, $21, $01, $1A
+  ; .db $88, $22, $01, $22
+  ; .db $88, $23, $01, $2A
+  ; .db $90, $30, $01, $12
+  ; .db $90, $31, $01, $1A
+  ; .db $90, $32, $01, $22
+  ; .db $90, $33, $01, $2A
 
 spritesLvl6:
-  .db $67, $04, $01, $92 ; exit
-  .db $67, $05, $01, $9A
-  .db $67, $06, $01, $A2
-  .db $67, $07, $01, $AA
-  .db $6F, $14, $01, $92
-  .db $6F, $15, $01, $9A
-  .db $6F, $16, $01, $A2
-  .db $6F, $17, $01, $AA
-  .db $90, $00, $01, $82 ; pause btn
-  .db $90, $01, $01, $8A
-  .db $90, $02, $01, $92
-  .db $90, $03, $01, $9A
-  .db $98, $10, $01, $82
-  .db $98, $11, $01, $8A
-  .db $98, $12, $01, $92
-  .db $98, $13, $01, $9A
+  .db $79, $01, $00, $99
+  .db $71, $11, $00, $99
+  ; .db $67, $04, $01, $92 ; exit
+  ; .db $67, $05, $01, $9A
+  ; .db $67, $06, $01, $A2
+  ; .db $67, $07, $01, $AA
+  ; .db $6F, $14, $01, $92
+  ; .db $6F, $15, $01, $9A
+  ; .db $6F, $16, $01, $A2
+  ; .db $6F, $17, $01, $AA
+  ; .db $90, $00, $01, $82 ; pause btn
+  ; .db $90, $01, $01, $8A
+  ; .db $90, $02, $01, $92
+  ; .db $90, $03, $01, $9A
+  ; .db $98, $10, $01, $82
+  ; .db $98, $11, $01, $8A
+  ; .db $98, $12, $01, $92
+  ; .db $98, $13, $01, $9A
 
 ; spritesPointersTwo:
 ;   .dw spritesLvl4
@@ -3260,8 +3273,9 @@ buttonsPositions:
 
   .bank 4
   .org $0000
-  .incbin "bladerewindertitle.chr"
+  .incbin "ale.chr"
+  ; .incbin "bladerewindertitle.chr"
 
   .bank 5
   .org $0000
-  .incbin "bladerewinderV2.chr"   ;includes 8KB graphics file from SMB1
+  .incbin "ale.chr"   ;includes 8KB graphics file from SMB1
