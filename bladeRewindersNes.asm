@@ -128,6 +128,7 @@ STATETITLE     = $00  ; displaying title screen
 STATEPLAYING   = $01  ; move paddles/ball, check for collisions
 STATEGAMEOVER  = $02  ; displaying game over screen
 STATEINTRO     = $04  ; display intro text
+STATETRANSITION = $05 ; display level description
 
 PLAYERY        = $0200
 PLAYERX        = $0203
@@ -274,25 +275,25 @@ vblankwait2:      ; Second wait for vblank, PPU is ready after this
   ; LDA #$00
   ; STA writerIsActive
 
-
-LoadPalettes:
-  LDA $2002             ; read PPU status to reset the high/low latch
-  LDA #$3F
-  STA $2006             ; write the high byte of $3F00 address
-  LDA #$00
-  STA $2006             ; write the low byte of $3F00 address
-  LDX #$00              ; start out at 0
-LoadPalettesLoop:
-  LDA palette, x        ; load data from address (palette + the value in x)
-                          ; 1st time through loop it will load palette+0
-                          ; 2nd time through loop it will load palette+1
-                          ; 3rd time through loop it will load palette+2
-                          ; etc
-  STA $2007             ; write to PPU
-  INX                   ; X = X + 1
-  CPX #$20              ; Compare X to hex $10, decimal 16 - copying 16 bytes = 4 sprites
-  BNE LoadPalettesLoop  ; Branch to LoadPalettesLoop if compare was Not Equal to zero
-                        ; if compare was equal to 32, keep going down
+  JSR LoadPalettes
+; LoadPalettes:
+;   LDA $2002             ; read PPU status to reset the high/low latch
+;   LDA #$3F
+;   STA $2006             ; write the high byte of $3F00 address
+;   LDA #$00
+;   STA $2006             ; write the low byte of $3F00 address
+;   LDX #$00              ; start out at 0
+; LoadPalettesLoop:
+;   LDA palette, x        ; load data from address (palette + the value in x)
+;                           ; 1st time through loop it will load palette+0
+;                           ; 2nd time through loop it will load palette+1
+;                           ; 3rd time through loop it will load palette+2
+;                           ; etc
+;   STA $2007             ; write to PPU
+;   INX                   ; X = X + 1
+;   CPX #$20              ; Compare X to hex $10, decimal 16 - copying 16 bytes = 4 sprites
+;   BNE LoadPalettesLoop  ; Branch to LoadPalettesLoop if compare was Not Equal to zero
+;                         ; if compare was equal to 32, keep going down
 
   LDA #$00 ;level number - 1
   STA levelNumber
@@ -394,15 +395,20 @@ GameEngine:
   BNE .gameEngineContinue   ;;game is playing
   JMP EnginePlaying
 
-  LDA gamestate
-  CMP #STATEGAMEOVER
-  BNE .gameEngineContinue
-  JMP EngineGameOver  ;;game is displaying ending screen
+  ; LDA gamestate
+  ; CMP #STATEGAMEOVER
+  ; BNE .gameEngineContinue
+  ; JMP EngineGameOver  ;;game is displaying ending screen
 
 .gameEngineContinue
   LDA gamestate
   CMP #STATEINTRO
   BEQ EngineIntro
+
+  LDA gamestate
+  CMP #STATETRANSITION
+  BNE GameEngineDone
+  JMP EngineTransition
 GameEngineDone:
 
   JSR UpdateSprites
@@ -563,6 +569,22 @@ ReadIntroStartBtn:
   ; LDA #$00
   ; STA writerIsActive
 ReadIntroStartBtnDone:
+  JMP GameEngineDone
+
+EngineTransition:
+  LDA buttons1
+  AND #%00010000
+  BEQ .transitionDone ;btn not pressed
+  ; turn PPU off
+  LDA #$00
+  STA $2001
+  JSR LoadPalettes
+  JSR ResetLevel
+  LDA #STATEPLAYING
+  STA gamestate
+  LDA #$04
+  JSR sound_load
+.transitionDone:
   JMP GameEngineDone
 
 EnginePlaying:
@@ -1530,11 +1552,52 @@ SetExitPosition:
   STA exitY
   RTS
 
+LoadTransitionBG:
+  lda levelNumber ;gets the number of the current level
+	asl A ;multiplies it by 2 since each pointer is 2 bytes
+	tax
+  LDA transitionsScreens+0, X
+  STA pointerLo
+  LDA transitionsScreens+1, X
+  STA pointerHi
+  LDA #$00 ;ppu off
+  STA $2001
+  JSR LoadBlackScreen
+  LDA $2002             ; read PPU status to reset the high/low latch
+  LDA #$22
+  STA $2006             ; write the high byte of $2000 address
+  LDA #$20
+  STA $2006             ; write the low byte of $2000 address
+  LDY #$00
+.loop:
+  LDA [pointerLo], Y
+  STA $2007
+  INY
+  CPY #$04
+  BNE .loop
+  ; load transition palette
+  LDA $2002             ; read PPU status to reset the high/low latch
+  LDA #$3F
+  STA $2006             ; write the high byte of $3F00 address
+  LDA #$00
+  STA $2006             ; write the low byte of $3F00 address
+  LDX #$00              ; start out at 0
+.loadPalettesLoop:
+  LDA paletteTransition, x
+  STA $2007             ; write to PPU
+  INX                   ; X = X + 1
+  CPX #$20              ; Compare X to hex $10, decimal 16 - copying 16 bytes = 4 sprites
+  BNE .loadPalettesLoop  
+  LDA #STATETRANSITION
+  STA gamestate
+  JMP Forever ;wait for NMI
+
 LoadNxtLevel:
   LDA levelNumber
   CLC
   ADC #$01
   STA levelNumber
+  JMP LoadTransitionBG
   ; Dialog turn off
   ; JSR CheckDialogue
 ResetLevel:
@@ -1607,6 +1670,25 @@ ReadController1Loop:
 ;   DEX
 ;   BNE ReadController2Loop
 ;   RTS
+LoadPalettes:
+  LDA $2002             ; read PPU status to reset the high/low latch
+  LDA #$3F
+  STA $2006             ; write the high byte of $3F00 address
+  LDA #$00
+  STA $2006             ; write the low byte of $3F00 address
+  LDX #$00              ; start out at 0
+LoadPalettesLoop:
+  LDA palette, x        ; load data from address (palette + the value in x)
+                          ; 1st time through loop it will load palette+0
+                          ; 2nd time through loop it will load palette+1
+                          ; 3rd time through loop it will load palette+2
+                          ; etc
+  STA $2007             ; write to PPU
+  INX                   ; X = X + 1
+  CPX #$20              ; Compare X to hex $10, decimal 16 - copying 16 bytes = 4 sprites
+  BNE LoadPalettesLoop  ; Branch to LoadPalettesLoop if compare was Not Equal to zero
+                        ; if compare was equal to 32, keep going down
+  RTS
 
 LoadLevel:
   JSR CleanSprites
@@ -2743,6 +2825,10 @@ palette:
   .db $2B,$3D,$01,$38,  $2B,$2D,$3D,$19,  $2B,$28,$1C,$17,  $2B,$20,$3D,$0F   ;;background palette
   .db $2B,$1C,$37,$20,  $2B,$20,$10,$24,  $2B,$1C,$37,$16,  $2B,$05,$37,$15   ;;sprite palette
 
+paletteTransition:
+  .db $0F,$3D,$01,$38,  $0F,$2D,$3D,$19,  $0F,$28,$1C,$17,  $0F,$20,$3D,$0F   ;;background palette
+  .db $0F,$1C,$37,$20,  $0F,$20,$10,$24,  $0F,$1C,$37,$16,  $0F,$05,$37,$15   ;;sprite palette
+
 ; spritesLvl1:
 ;      ;vert tile attr horiz
 ;   .db $80, $50, $03, $80
@@ -3029,6 +3115,12 @@ buttonsLvl6:
   ; X, Y, type (1=pause, 2=rewind, 3=exit?)
   .db $02, $04, $02
 
+transition1:
+  .db $11, $18, $15, $0A
+
+transition2:
+  .db $17, $12, $0C, $18
+
 initialScreenPointers:
   ; .dw logoScreen
   ; .dw titleScreen
@@ -3234,6 +3326,13 @@ buttonsPositions:
   .dw buttonsLvl5
   .dw buttonsLvl6
 
+transitionsScreens:
+  .dw transition1
+  .dw transition2
+  .dw transition1
+  .dw transition1
+  .dw transition1
+  .dw transition1
 ;;;;;
 ;TEXTS
 ;;;;;
