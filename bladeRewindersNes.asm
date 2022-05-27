@@ -150,7 +150,7 @@ PPU_BUFFER     = $0400
 PAUSEDBTN      = $01
 REWINDBTN      = $02
 
-TEXT_SPEED = $02
+TEXT_SPEED = $01
 ; text intro
 TEXTSIZE_LOW   = $F0 ;low byte page/screen limit
 TEXTSIZE_PAGES  = $02 ;high byte page/screen limit, if limit is 1byte long its 00
@@ -166,25 +166,30 @@ DIALOGUE_1_LIMIT_LOW = $89
 DIALOGUE_1_LIMIT_HIGH = $00
 
 ; dialogue two
-DIALOGUE_2_SCREENS = $05
-DIALOGUE_2_LIMIT_LOW = $DB
-DIALOGUE_2_LIMIT_HIGH = $01
-
+; DIALOGUE_2_SCREENS = $05
+; DIALOGUE_2_LIMIT_LOW = $DB
+; DIALOGUE_2_LIMIT_HIGH = $01
+DIALOGUE_2_SCREENS = $02
+DIALOGUE_2_LIMIT_LOW = $89
+DIALOGUE_2_LIMIT_HIGH = $00
 ; dialogue three
-DIALOGUE_3_SCREENS = $05
-DIALOGUE_3_LIMIT_LOW = $D9
-DIALOGUE_3_LIMIT_HIGH = $01
-
+; DIALOGUE_3_SCREENS = $05
+; DIALOGUE_3_LIMIT_LOW = $D9
+; DIALOGUE_3_LIMIT_HIGH = $01
+DIALOGUE_3_SCREENS = $02
+DIALOGUE_3_LIMIT_LOW = $89
+DIALOGUE_3_LIMIT_HIGH = $00
 ; dialogue four
-DIALOGUE_4_SCREENS = $05
-DIALOGUE_4_LIMIT_LOW = $5E
-DIALOGUE_4_LIMIT_HIGH = $01
-
+; DIALOGUE_4_SCREENS = $05
+; DIALOGUE_4_LIMIT_LOW = $5E
+; DIALOGUE_4_LIMIT_HIGH = $01
+DIALOGUE_4_SCREENS = $02
+DIALOGUE_4_LIMIT_LOW = $89
+DIALOGUE_4_LIMIT_HIGH = $00
 ; text finale;
 TEXT_FINAL_SCREENS = $02
 TEXT_FINAL_LIMIT_LOW = $3E
 TEXT_FINAL_LIMIT_HIGH = $00
-
 LAST_LEVEL = $06
 
 ;;;;;;;;;;;;;;;;;;
@@ -203,6 +208,7 @@ LAST_LEVEL = $06
   spritesLvl3:
   .db $82, $01, $00, $99
   .db $8A, $11, $00, $99
+  .db $9F, $21, $01, $29
   ; .db $7F, $04, $01, $82 ; exit
   ; .db $7F, $05, $01, $8A
   ; .db $7F, $06, $01, $92
@@ -284,7 +290,7 @@ vblankwait2:      ; Second wait for vblank, PPU is ready after this
   STA currentPalette+1
   JSR LoadPalettes
 
-  LDA #$00 ;level number - 1
+  LDA #$05 ;level number - 1
   STA levelNumber
   LDA #$00
   STA letterCursor
@@ -571,11 +577,12 @@ EngineTransition:
   ; turn PPU off
   LDA #$00
   STA $2001
-  LDA #LOW(palette)
-  STA currentPalette+0
-  LDA #HIGH(palette)
-  STA currentPalette+1
-  JSR LoadPalettes
+  ; LDA #LOW(palette)
+  ; STA currentPalette+0
+  ; LDA #HIGH(palette)
+  ; STA currentPalette+1
+  ; JSR LoadPalettes
+  JSR LoadLevelPalette
   JSR ResetLevel
   LDA #STATEPLAYING
   STA gamestate
@@ -1932,45 +1939,6 @@ InitialInsideLoop:
   BNE InitialOutsideLoop     ; run the outside loop 256 times before continuing down
   RTS
 
-;;;; black screen
-; LoadBlackScreen:
-;   LDA $2002             ; read PPU status to reset the high/low latch
-;   LDA #$20
-;   STA $2006             ; write the high byte of $2000 address
-;   LDA #$00
-;   STA $2006             ; write the low byte of $2000 address
-
-;   LDX #$00            ; start at pointer + 0
-;   LDY #$00
-; .initialOutsideLoop:
-
-; .initialInsideLoop:
-;   LDA #$24  ; copy one background byte from address in pointer plus Y
-;   STA $2007           ; this runs 256 * 4 times
-
-;   INY                 ; inside loop counter
-;   CPY #$00
-;   BNE .initialInsideLoop      ; run the inside loop 256 times before continuing down
-;   INX
-;   CPX #$04
-;   BNE .initialOutsideLoop     ; run the outside loop 256 times before continuing down
-
-;   ;; write attributes, in this case black and white (3rd palette)
-;   LDA $2002             ; read PPU status to reset the high/low latch
-;   LDA #$23
-;   STA $2006             ; write the high byte of $23C0 address
-;   LDA #$C0
-;   STA $2006             ; write the low byte of $23C0 address
-;   LDX #$00              ; start out at 0
-; .loadAttributeLoop:
-;   LDA #%11111111     ; load data from address (attribute + the value in x)
-;   STA $2007             ; write to PPU
-;   INX                   ; X = X + 1
-;   CPX #$40              ; Compare X to hex $08, decimal 8 - copying 8 bytes
-;   BNE .loadAttributeLoop
-;   JSR CleanSprites
-;   RTS
-
 ;;;;;;;;;;;;
 ;;;;;;;;;;;;;
 ; SQR ROUTINE
@@ -2031,7 +1999,7 @@ Result:
 ; 	RTS
 ;;;;;; level sprites data
 spritesTotalPerLvl: ;value multiplied by four because of attributes
-  .db $08, $08, $08, $08, $08, $08
+  .db $0C, $0C, $0C, $08, $0C, $38
 
 ; spritesLvl1:
 ;      ;vert tile attr horiz
@@ -2225,6 +2193,7 @@ spritesLvl1:
   ; larissa
   .db $61, $01, $00, $79
   .db $69, $11, $00, $79
+  .db $9F, $20, $01, $69
   ; .db $5F, $04, $01, $62 ; exit
   ; .db $5F, $05, $01, $6A
   ; .db $5F, $06, $01, $72
@@ -2245,6 +2214,7 @@ spritesLvl1:
 spritesLvl2:
   .db $6A, $01, $00, $89
   .db $72, $11, $00, $89
+  .db $A8, $20, $01, $39
   ; .db $67, $04, $01, $92 ; exit
   ; .db $67, $05, $01, $9A
   ; .db $67, $06, $01, $A2
@@ -2576,6 +2546,24 @@ CheckDialogue:
   JSR LoadBlackScreen
   JMP Forever ;wait for NMI
 
+LoadLevelPalette:
+  LDA levelNumber
+  CMP #$03
+  BPL .insidePalette
+  LDA #LOW(palette)
+  STA currentPalette+0
+  LDA #HIGH(palette)
+  STA currentPalette+1
+  JMP .done
+.insidePalette:
+  LDA #LOW(paletteInside)
+  STA currentPalette+0
+  LDA #HIGH(paletteInside)
+  STA currentPalette+1
+.done:
+  JSR LoadPalettes
+  RTS
+
 CleanSprites:
   ; clean sprites
   LDA #$00
@@ -2583,7 +2571,7 @@ CleanSprites:
 .cleanPPULoop:
   STA PLAYERY, x
   INX
-  CPX #$40 ;char and br sprites
+  CPX #$60 ;char and br sprites
   BNE .cleanPPULoop
   LDX #$00
 .cleanBtns:
@@ -2643,7 +2631,7 @@ DrawDialogueFace:
   LDA dialogueFacePlayer, y        ; load data from address (sprites +  x)
   STA $0200, y          ; store into RAM address ($0200 + x)
   INY                   ; X = X + 1
-  CPY #$40     ; Compare X to hex $10, decimal
+  CPY #$60     ; Compare X to hex $10, decimal
   BNE .loadFace
   JSR DrawDialogueLines
   RTS
@@ -2656,7 +2644,7 @@ DrawDialogueLines:
   STA $2006             ; write the low byte of $2000 address
   LDY #$00
 .lineLoop:
-  LDA #$E4
+  LDA #$FF
   STA $2007
   INY
   CPY #$20
@@ -2668,31 +2656,39 @@ DrawDialogueLines:
   STA $2006
   LDY #$00
 .bottomLineLoop:
-  LDA #$E4
+  LDA #$FF
   STA $2007
   INY
   CPY #$20
   BNE .bottomLineLoop
   RTS
 
-dialogueFacePlayer:
-    ;vert tile attr horiz
-  .db $63, $01, $02, $6C
-  .db $63, $01, $02, $74
-  .db $63, $01, $02, $7C
-  .db $63, $01, $02, $84
-  .db $6B, $01, $02, $6C
-  .db $6B, $01, $02, $74
-  .db $6B, $01, $02, $7C
-  .db $6B, $01, $02, $84
-  .db $73, $01, $02, $6C
-  .db $73, $01, $02, $74
-  .db $73, $01, $02, $7C
-  .db $73, $01, $02, $84
-  .db $7B, $01, $02, $6C
-  .db $7B, $01, $02, $74
-  .db $7B, $01, $02, $7C
-  .db $7B, $01, $02, $84
+; dialogueFacePlayer:
+;     ;vert tile attr horiz
+;   .db $53, $30, $02, $6C
+;   .db $53, $31, $02, $74
+;   .db $53, $32, $02, $7C
+;   .db $53, $33, $02, $84
+;   .db $5B, $40, $02, $6C
+;   .db $5B, $41, $02, $74
+;   .db $5B, $42, $02, $7C
+;   .db $5B, $43, $02, $84
+;   .db $63, $50, $02, $6C
+;   .db $63, $51, $02, $74
+;   .db $63, $52, $02, $7C
+;   .db $63, $53, $02, $84
+;   .db $6B, $60, $02, $6C
+;   .db $6B, $61, $02, $74
+;   .db $6B, $62, $02, $7C
+;   .db $6B, $63, $02, $84
+;   .db $73, $70, $02, $6C
+;   .db $73, $71, $02, $74
+;   .db $73, $72, $02, $7C
+;   .db $73, $73, $02, $84
+;   .db $7B, $80, $02, $6C
+;   .db $7B, $81, $02, $74
+;   .db $7B, $82, $02, $7C
+;   .db $7B, $83, $02, $84
 
 Bankswitch:
   TAX ;;copy A into X
@@ -2738,150 +2734,34 @@ titleScreen:
 ;   incbin "intro1.nam"
 
 bglvl01:
-  incbin "maps/ale/test1.nam"
+  incbin "maps/ale/lvl1.nam"
 
 bglvl02:
-  incbin "maps/ale/test2.nam"
+  incbin "maps/ale/lvl2.nam"
 
 bglvl03:
-  incbin "maps/ale/test3.nam"
+  incbin "maps/ale/lvl3.nam"
 
 bglvl04:
-  incbin "maps/ale/test4.nam"
+  incbin "maps/ale/lvl4.nam"
 
 bglvl05:
-  incbin "maps/ale/test5.nam"
+  incbin "maps/ale/lvl5.nam"
 
 bglvl06:
-  incbin "maps/ale/test6.nam"
+  incbin "maps/ale/lvl6.nam"
 
 palette:
   .db $2B,$3D,$01,$38,  $2B,$2D,$3D,$19,  $2B,$28,$1C,$17,  $2B,$20,$3D,$0F   ;;background palette
-  .db $2B,$1C,$37,$20,  $2B,$20,$10,$24,  $2B,$1C,$37,$16,  $2B,$05,$37,$15   ;;sprite palette
+  .db $2B,$1C,$37,$20,  $2B,$15,$20,$25,  $2B,$1C,$37,$16,  $2B,$05,$37,$15   ;;sprite palette
 
 paletteTransition:
   .db $0F,$3D,$01,$38,  $0F,$2D,$3D,$19,  $0F,$28,$1C,$17,  $0F,$20,$3D,$0F   ;;background palette
-  .db $0F,$1C,$37,$20,  $0F,$20,$10,$24,  $0F,$1C,$37,$16,  $0F,$05,$37,$15   ;;sprite palette
+  .db $0F,$1C,$37,$20,  $0F,$20,$10,$24,  $0F,$27,$15,$36,  $0F,$05,$37,$15   ;;sprite palette
 
-; spritesLvl1:
-;      ;vert tile attr horiz
-;   .db $80, $50, $03, $80
-;   .db $80, $51, $03, $88
-;   .db $88, $60, $03, $80
-;   .db $88, $61, $03, $88
-;   .db $90, $70, $03, $80
-;   .db $90, $71, $03, $88
-;   ; .db $63, $40, $00, $6C   ;BR 1
-;   ;BR 1 full body
-;   .db $73, $52, $02, $64
-;   .db $73, $53, $02, $6C
-;   .db $6B, $62, $02, $64
-;   .db $6B, $63, $02, $6C
-;   .db $63, $72, $02, $64
-;   .db $63, $73, $02, $6C
-;   ;.db $63, $40, $00, $6C   ;BR 2
-;   ;.db $63, $41, $03, $6C   ; exit
-;   .db $5F, $04, $01, $62
-;   .db $5F, $05, $01, $6A
-;   .db $5F, $06, $01, $72
-;   .db $5F, $07, $01, $7A
-;   .db $67, $14, $01, $62
-;   .db $67, $15, $01, $6A
-;   .db $67, $16, $01, $72
-;   .db $67, $17, $01, $7A
-;   ; .db $83, $41, $00, $6C   ;sprite 1
-;   ; .db $73, $41, $00, $8C   ;sprite 1
-;   ; .db $8B, $41, $00, $9C   ;sprite 1
-
-;   spritesLvl4:
-;      ;vert tile attr horiz
-;   .db $80, $50, $03, $80
-;   .db $80, $51, $03, $88
-;   .db $88, $60, $03, $80
-;   .db $88, $61, $03, $88
-;   .db $90, $70, $03, $80
-;   .db $90, $71, $03, $88
-;   ; .db $63, $40, $00, $6C   ;BR 1
-;   ;BR 1 full body
-;   .db $73, $52, $02, $64
-;   .db $73, $53, $02, $6C
-;   .db $6B, $62, $02, $64
-;   .db $6B, $63, $02, $6C
-;   .db $63, $72, $02, $64
-;   .db $63, $73, $02, $6C
-;   ;.db $63, $40, $00, $6C   ;BR 2
-;   ;.db $63, $41, $03, $6C   ; exit
-;   .db $5F, $04, $01, $62
-;   .db $5F, $05, $01, $6A
-;   .db $5F, $06, $01, $72
-;   .db $5F, $07, $01, $7A
-;   .db $67, $14, $01, $62
-;   .db $67, $15, $01, $6A
-;   .db $67, $16, $01, $72
-;   .db $67, $17, $01, $7A
-;   ; .db $83, $41, $00, $6C   ;sprite 1
-;   ; .db $73, $41, $00, $8C   ;sprite 1
-;   ; .db $8B, $41, $00, $9C   ;sprite 1
-
-; spritesLvl2:
-;      ;vert tile attr horiz
-;   .db $80, $50, $03, $80
-;   .db $80, $51, $03, $88
-;   .db $88, $60, $03, $80
-;   .db $88, $61, $03, $88
-;   .db $90, $70, $03, $80
-;   .db $90, $71, $03, $88
-;   ;BR 1 full body
-;   .db $73, $52, $02, $64
-;   .db $73, $53, $02, $6C
-;   .db $6B, $62, $02, $64
-;   .db $6B, $63, $02, $6C
-;   .db $63, $72, $02, $64
-;   .db $63, $73, $02, $6C
-;   ; .db $83, $41, $00, $6C   ;sprite 1
-;   ; .db $8B, $41, $00, $9C   ;sprite 1
-;   .db $67, $04, $01, $92 ; exit
-;   .db $67, $05, $01, $9A
-;   .db $67, $06, $01, $A2
-;   .db $67, $07, $01, $AA
-;   .db $6F, $14, $01, $92
-;   .db $6F, $15, $01, $9A
-;   .db $6F, $16, $01, $A2
-;   .db $6F, $17, $01, $AA
-;   .db $98, $20, $01, $32 ; pause btn
-;   .db $98, $21, $01, $3A
-;   .db $98, $22, $01, $42
-;   .db $98, $23, $01, $4A
-;   .db $A0, $30, $01, $32
-;   .db $A0, $31, $01, $3A
-;   .db $A0, $32, $01, $42
-;   .db $A0, $33, $01, $4A
-
-; spritesLvl3:
-;   .db $80, $50, $03, $80
-;   .db $80, $51, $03, $88
-;   .db $88, $60, $03, $80
-;   .db $88, $61, $03, $88
-;   .db $90, $70, $03, $80
-;   .db $90, $71, $03, $88
-;   ; .db $63, $40, $00, $6C   ;BR 1
-;   ;BR 1 full body
-;   .db $73, $52, $02, $64
-;   .db $73, $53, $02, $6C
-;   .db $6B, $62, $02, $64
-;   .db $6B, $63, $02, $6C
-;   .db $63, $72, $02, $64
-;   .db $63, $73, $02, $6C
-;   ;.db $63, $40, $00, $6C   ;BR 2
-;   ;.db $63, $41, $03, $6C   ; exit
-;   .db $5F, $04, $01, $62
-;   .db $5F, $05, $01, $6A
-;   .db $5F, $06, $01, $72
-;   .db $5F, $07, $01, $7A
-;   .db $67, $14, $01, $62
-;   .db $67, $15, $01, $6A
-;   .db $67, $16, $01, $72
-;   .db $67, $17, $01, $7A
+paletteInside:
+  .db $06,$16,$00,$38,  $06,$00,$3D,$38,  $06,$16,$28,$20,  $06,$16,$10,$2D   ;;background palette
+  .db $06,$1C,$37,$20,  $06,$15,$20,$25,  $06,$1C,$37,$16,  $06,$05,$37,$0F   ;;sprite palette
 
 blocksTotalPerLvl: ;no need to multiply, I'm jumping over extra values
   .db $05, $0A, $0D, $05, $08, $09
@@ -3064,6 +2944,33 @@ initialScreenPointers:
   .bank 3
   .org $E000
 
+  dialogueFacePlayer:
+    ;vert tile attr horiz
+  .db $53, $30, $02, $6C
+  .db $53, $31, $02, $74
+  .db $53, $32, $02, $7C
+  .db $53, $33, $02, $84
+  .db $5B, $40, $02, $6C
+  .db $5B, $41, $02, $74
+  .db $5B, $42, $02, $7C
+  .db $5B, $43, $02, $84
+  .db $63, $50, $02, $6C
+  .db $63, $51, $02, $74
+  .db $63, $52, $02, $7C
+  .db $63, $53, $02, $84
+  .db $6B, $60, $02, $6C
+  .db $6B, $61, $02, $74
+  .db $6B, $62, $02, $7C
+  .db $6B, $63, $02, $84
+  .db $73, $70, $02, $6C
+  .db $73, $71, $02, $74
+  .db $73, $72, $02, $7C
+  .db $73, $73, $02, $84
+  .db $7B, $80, $02, $6C
+  .db $7B, $81, $02, $74
+  .db $7B, $82, $02, $7C
+  .db $7B, $83, $02, $84
+
 ; spritesLvl45:
 ;   .db $67, $04, $01, $92 ; exit
 ;   .db $67, $05, $01, $9A
@@ -3153,6 +3060,7 @@ spritesCharacters:
 spritesLvl5:
   .db $8A, $01, $00, $C9
   .db $92, $11, $00, $C9
+  .db $98, $20, $01, $19
   ; .db $77, $04, $01, $B2 ; exit
   ; .db $77, $05, $01, $BA
   ; .db $77, $06, $01, $C2
@@ -3171,8 +3079,24 @@ spritesLvl5:
   ; .db $90, $33, $01, $2A
 
 spritesLvl6:
-  .db $79, $01, $00, $99
-  .db $71, $11, $00, $99
+  .db $71, $01, $00, $99
+  .db $79, $11, $00, $99
+  ; dinosaurios
+  .db $70, $03, $01, $78
+  .db $78, $13, $01, $78
+  .db $78, $14, $01, $80
+  ; 2nd
+  .db $68, $03, $01, $88
+  .db $70, $13, $01, $88
+  .db $70, $14, $01, $90
+   ;3rd
+  .db $80, $03, $01, $98
+  .db $88, $13, $01, $98
+  .db $88, $14, $01, $A0
+  ; 4rd
+  .db $78, $03, $01, $A8
+  .db $80, $13, $01, $A8
+  .db $80, $14, $01, $B0
   ; .db $67, $04, $01, $92 ; exit
   ; .db $67, $05, $01, $9A
   ; .db $67, $06, $01, $A2
