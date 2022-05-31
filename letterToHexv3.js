@@ -48,10 +48,11 @@ const letters = {
 ///// dialogue 1
 // const message = `Houston, we have a problem! They were waiting for me! But I can see the vhs ... My precious ... I have to get my hands on that vhs. For the sake of my Saturday nights, I have to! Everything ends now! I swear on Keanu Reeves they are not going to get away with it! You against my Blade Rewinders, may the best nerd win!`;
 ///// end text
-const message = 'You have rewound the movie and defeated the Blade Rewinders!'
+const message = 'no logro encontrarla en este lugar tan enorme, Por que elegi un lugar asi? Ah, si...soy un overkill... no puede ser! ya suena The 7th Element! Me estoy quedando sin tiempo, tengo que encontrarla ya!'
 
-//const txtLimit = 170; // dialogue limit
-const txtLimit = 752; // full screen txt limit
+const toggleOn = true;
+const txtLimit = 170; // dialogue limit
+// const txtLimit = 752; // full screen txt limit
 
 const stringToHex = () => {
     /*
@@ -135,9 +136,11 @@ const stringToHex = () => {
     });
     // if extra or missing lines, toggle this code below
     ///////////
-    lineArray.forEach(element => {
-        resultArray.push(element);
-    });
+    if (toggleOn) {
+        lineArray.forEach(element => {
+            resultArray.push(element);
+        });
+    }
     ///////////
     let resultMessage = "";
     resultArray.forEach(element => {
