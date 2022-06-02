@@ -132,6 +132,7 @@ STATEPLAYING   = $01  ; move paddles/ball, check for collisions
 STATEGAMEOVER  = $02  ; displaying game over screen
 STATEINTRO     = $04  ; display intro text
 STATETRANSITION = $05 ; display level description
+STATEWAITING   = $06  ; waits and updates sprites
 
 PLAYERY        = $0200
 PLAYERX        = $0203
@@ -150,7 +151,7 @@ PPU_BUFFER     = $0400
 PAUSEDBTN      = $01
 REWINDBTN      = $02
 
-TEXT_SPEED = $01
+TEXT_SPEED = $03
 ; text intro
 TEXTSIZE_LOW   = $F0 ;low byte page/screen limit
 TEXTSIZE_PAGES  = $02 ;high byte page/screen limit, if limit is 1byte long its 00
@@ -398,12 +399,20 @@ GameEngine:
 .gameEngineContinue
   LDA gamestate
   CMP #STATEINTRO
-  BEQ EngineIntro
+  BNE .gameEngineContinue2   ;;game is playing
+  JMP EngineIntro
 
+.gameEngineContinue2
   LDA gamestate
   CMP #STATETRANSITION
-  BNE GameEngineDone
+  BNE .gameEngineContinue3   ;;game is playing
   JMP EngineTransition
+
+.gameEngineContinue3
+  LDA gamestate
+  CMP #STATEWAITING
+  BNE GameEngineDone
+  JMP EngineWait
 GameEngineDone:
 
   JSR UpdateSprites
@@ -515,7 +524,7 @@ EngineIntro:
   LDA [pointerLo], Y
   CMP #$24
   BEQ .checkCounter
-  LDA #$02
+  LDA #$05
   JSR sound_load
 .checkCounter
   LDA currentPage
@@ -589,6 +598,18 @@ EngineTransition:
   LDA #$04
   JSR sound_load
 .transitionDone:
+  JMP GameEngineDone
+
+EngineWait: ;just for victory song on each lvl win
+  LDA timerWait
+  SEC
+  SBC #$01
+  STA timerWait
+  LDA timerWait
+  CMP #$00
+  BNE .waitDone
+  JSR LoadNxtLevel
+.waitDone:
   JMP GameEngineDone
 
 EnginePlaying:
@@ -814,7 +835,11 @@ GameEngineContinue:
 UpdateSprites:
   LDA gamestate
   CMP #STATEPLAYING
+  BEQ .continueWithUpdate
+  LDA gamestate
+  CMP #STATEWAITING
   BNE UpdateSpritesDone
+.continueWithUpdate
   ; update player
   LDA posx
   STA charPosX
@@ -1077,7 +1102,7 @@ ButtonsLoopContinue:
   INY
   CLC
   CPX buttonsAmount
-  BCS CheckButtonsLoop
+  BMI CheckButtonsLoop
 ButtonsLoopDone:
   RTS
 
@@ -1516,9 +1541,15 @@ CheckIfExit:
   BNE CheckIfExitDone
   LDA #$01
   STA playerHasWon
+  LDA #$00
+  JSR sound_load
   LDA #$0A
   JSR sound_load
-  JSR LoadNxtLevel
+  LDA #$F0 ;tiempo de espera para musica victoria
+  STA timerWait
+  LDA #STATEWAITING
+  STA gamestate
+  JMP Forever
 CheckIfExitDone:
   RTS
 
@@ -2705,7 +2736,7 @@ Bankvalues:
 ;   incbin "logoscreen1.nam"
 
 titleScreen:
-  incbin "titlescreen2.nam"
+  incbin "aleTitleScreen.nam"
 
 ; intro1:
 ;   incbin "intro1.nam"
@@ -2733,7 +2764,7 @@ palette:
   .db $2B,$1C,$37,$20,  $2B,$15,$20,$25,  $2B,$1C,$37,$16,  $2B,$05,$37,$15   ;;sprite palette
 
 paletteTransition:
-  .db $0F,$3D,$01,$38,  $0F,$2D,$3D,$19,  $0F,$28,$1C,$17,  $0F,$20,$3D,$0F   ;;background palette
+  .db $0F,$20,$3D,$0F,  $0F,$2D,$3D,$19,  $0F,$27,$37,$06,  $0F,$20,$3D,$0F   ;;background palette
   .db $0F,$1C,$37,$20,  $0F,$20,$10,$24,  $0F,$27,$15,$36,  $0F,$05,$37,$15   ;;sprite palette
 
 paletteInside:
@@ -3201,7 +3232,7 @@ transitionsScreens:
 
   .bank 4
   .org $0000
-  .incbin "ale.chr"
+  .incbin "aleTitle.chr"
   ; .incbin "bladerewindertitle.chr"
 
   .bank 5

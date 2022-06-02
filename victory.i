@@ -1,15 +1,15 @@
 victory_header:
-    .byte $04           ;4 streams
+    .byte $01           ;4 streams
     
-    .byte SFX_1         ;which stream
+    .byte MUSIC_TRI     ;which stream
     .byte $01           ;status byte (stream enabled)
-    .byte SQUARE_1      ;which channel
-    .byte $70           ;duty (01)
-    .byte ve_short_staccato  ;volume envelope
-    .word victory_square1 ;pointer to stream
-    .byte $80           ;tempo
+    .byte TRIANGLE      ;which channel
+    .byte $80           ;initial volume (on)
+    .byte ve_tgl_2      ;volume envelope
+    .word victory_tri1  ;pointer to stream
+    .byte $53           ;tempo
     
-victory_square1:
+victory_tri1:
     .byte sixteenth
-    .byte C5, E5, G4, C4
+    .byte C4, thirtysecond, rest, sixteenth, C4, D4, E4, F4
     .byte endsound
