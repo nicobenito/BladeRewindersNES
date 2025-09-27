@@ -30,9 +30,13 @@ heartCounter  .rs 1  ; secondary counter (0-4, resets at 5)
 itemx         .rs 1  ; falling item X position
 itemy         .rs 1  ; falling item Y position
 itemactive    .rs 1  ; 1 = item is falling, 0 = no item
-itemtype      .rs 1  ; 0 = good item (heart), 1 = bad item (broken heart)
+itemtype      .rs 1  ; 0 = good item (heart), 1 = bad item (broken heart), 2 = cake
 itemspeed     .rs 1  ; falling speed
 randomseed    .rs 1  ; simple random number seed
+; cake variables
+cakex         .rs 1  ; cake X position
+cakeactive    .rs 1  ; 1 = cake is moving, 0 = no cake
+cakespeed     .rs 1  ; cake horizontal speed
 ; physics variables
 velocity_y    .rs 1  ; player vertical velocity (signed: $00-$7F = down, $80-$FF = up)
 on_ground     .rs 1  ; 1 = player is on ground, 0 = player is in air
@@ -211,6 +215,12 @@ InitializeGame:
   STA itemspeed        ; falling speed
   LDA #$01
   STA randomseed       ; initial seed for random
+  
+;;;Set initial cake values
+  LDA #$00
+  STA cakeactive       ; no cake active at start
+  LDA #$02
+  STA cakespeed        ; cake horizontal speed
 
 ;;;Set initial physics values
   LDA #$00
@@ -457,7 +467,7 @@ SkipMovement:
 ; Handle falling item
 HandleFallingItem:
   LDA itemactive
-  BEQ SpawnNewItem      ; if no item active, try to spawn one
+  BEQ JumpToSpawnNewItem ; if no item active, try to spawn one
   
   ; Move item down
   LDA itemy
@@ -474,6 +484,9 @@ HandleFallingItem:
   LDA #$00
   STA itemactive
   JMP HandleFallingItemDone
+
+JumpToSpawnNewItem:
+  JMP SpawnNewItem
 
 CheckItemCollision:
   ; Simpler collision detection - check if sprites overlap
@@ -506,6 +519,10 @@ CheckItemCollision:
   ; Collision detected! Check item type
   LDA itemtype
   BEQ GoodItemCollision  ; if itemtype = 0, good item
+  CMP #$01
+  BEQ BadItemCollision   ; if itemtype = 1, bad item
+  ; itemtype = 2, cake item
+  JMP CakeItemCollision
   
 BadItemCollision:
   ; Bad item (broken heart) - decrement main score and reset heart counter
@@ -529,6 +546,15 @@ GoodItemCollision:
   LDA #$00
   STA heartCounter      ; reset heart counter to 0
   JSR IncrementScore    ; add 1 to main score
+  JMP ItemCollisionDone
+
+CakeItemCollision:
+  ; Cake collected - start it moving horizontally at floor level
+  LDA #$01
+  STA cakeactive        ; activate cake
+  LDA itemx             ; start cake at the X position where it was caught
+  STA cakex
+  ; Cake Y position is fixed at floor level (GROUND_Y)
   
 ItemCollisionDone:
   LDA #$00
@@ -545,9 +571,16 @@ SpawnNewItem:
   ADC #$17              ; add prime number
   STA randomseed
   
-  ; Use bit 7 to determine item type (0 or 1)
-  AND #$80              ; check bit 7
-  BEQ SetGoodItem       ; if bit 7 = 0, good item
+  ; Use bits 6-7 to determine item type (0, 1, or 2)
+  AND #$C0              ; check bits 6-7
+  CMP #$00              ; 00 = good item (heart)
+  BEQ SetGoodItem
+  CMP #$40              ; 01 = bad item (broken heart)  
+  BEQ SetBadItem
+  ; 10 or 11 = cake
+  LDA #$02              ; cake item
+  JMP SetItemType
+SetBadItem:
   LDA #$01              ; bad item
   JMP SetItemType
 SetGoodItem:
@@ -574,6 +607,27 @@ SpawnItemOK:
   STA itemactive
 
 HandleFallingItemDone:
+
+; Handle cake movement
+HandleCakeMovement:
+  LDA cakeactive
+  BEQ HandleCakeMovementDone  ; if no cake active, skip
+  
+  ; Move cake to the right
+  LDA cakex
+  CLC
+  ADC cakespeed
+  STA cakex
+  
+  ; Check if cake moved off screen
+  CMP #$F8              ; right edge + some margin
+  BCC HandleCakeMovementDone
+  
+  ; Cake moved off screen, deactivate it
+  LDA #$00
+  STA cakeactive
+
+HandleCakeMovementDone:
 
   JMP GameEngineDone
  
@@ -604,6 +658,12 @@ UpdateSprites:
   ; Set tile based on item type
   LDA itemtype
   BEQ SetGoodItemTile   ; if itemtype = 0, use tile 1 (heart)
+  CMP #$01
+  BEQ SetBadItemTile    ; if itemtype = 1, use tile 2 (broken heart)
+  ; itemtype = 2, cake
+  LDA #$A0              ; cake uses tile $A0
+  JMP SetItemTile
+SetBadItemTile:
   LDA #$02              ; bad item uses tile 2 (broken heart)
   JMP SetItemTile
 SetGoodItemTile:
@@ -616,7 +676,7 @@ SetItemTile:
   
   LDA itemx
   STA $0207             ; sprite 1 X position
-  JMP UpdateSpritesDone
+  JMP UpdateCakeSprite
 
 HideItemSprite:
   LDA #$FF              ; move sprite off screen
@@ -624,6 +684,31 @@ HideItemSprite:
   STA $0205
   STA $0206  
   STA $0207
+
+UpdateCakeSprite:
+  ; Update cake sprite (sprite 2)
+  LDA cakeactive
+  BEQ HideCakeSprite    ; if cake not active, hide sprite
+  
+  LDA #GROUND_Y         ; cake Y position at floor level
+  STA $0208             ; sprite 2 Y position
+  
+  LDA #$A0              ; cake tile
+  STA $0209             ; sprite 2 tile
+  
+  LDA #$02              ; attributes (palette 2)
+  STA $020A             ; sprite 2 attributes
+  
+  LDA cakex
+  STA $020B             ; sprite 2 X position
+  JMP UpdateSpritesDone
+
+HideCakeSprite:
+  LDA #$FF              ; move sprite off screen
+  STA $0208
+  STA $0209
+  STA $020A  
+  STA $020B
 
 UpdateSpritesDone:
   RTS
