@@ -10,8 +10,10 @@
   .rsset $0000  ;;start variables at ram location 0
   
 gamestate     .rs 1  ; .rs 1 means reserve one byte of space
-ballx         .rs 1  ; ball horizontal position
-bally         .rs 1  ; ball vertical position
+ballx         .rs 1  ; player 1 horizontal position
+bally         .rs 1  ; player 1 vertical position
+ball2x        .rs 1  ; player 2 horizontal position  
+ball2y        .rs 1  ; player 2 vertical position
 ballup        .rs 1  ; 1 = ball moving up
 balldown      .rs 1  ; 1 = ball moving down
 ballleft      .rs 1  ; 1 = ball moving left
@@ -39,9 +41,11 @@ cakeactive    .rs 1  ; 1 = cake is moving, 0 = no cake
 cakespeed     .rs 1  ; cake horizontal speed
 ; physics variables
 velocity_y    .rs 1  ; player vertical velocity (signed: $00-$7F = down, $80-$FF = up)
-on_ground     .rs 1  ; 1 = player is on ground, 0 = player is in air
+on_ground     .rs 1  ; 1 = player 1 is on ground, 0 = player 1 is in air
+on_ground2    .rs 1  ; 1 = player 2 is on ground, 0 = player 2 is in air
 jump_pressed  .rs 1  ; 1 = jump button was pressed this frame
 jump_counter  .rs 1  ; frames remaining in jump (0 = not jumping)
+jump_counter2 .rs 1  ; frames remaining in jump for player 2 (0 = not jumping)
 
 
 ;; DECLARE SOME CONSTANTS HERE
@@ -174,6 +178,32 @@ DrawFloorBottomLine:
   CPX #$20              ; 32 tiles across (full width)
   BNE DrawFloorBottomLine
 
+  ; Draw center line (tile $26) - simplified approach
+  ; Draw a few tiles in the middle rows for visibility
+  LDA $2002             ; read PPU status to reset the high/low latch
+  LDA #$21              ; row 8
+  STA $2006
+  LDA #$10              ; column 16 (middle)
+  STA $2006
+  LDA #$26              ; center line tile
+  STA $2007
+  
+  LDA $2002             ; read PPU status to reset the high/low latch  
+  LDA #$21              ; row 12
+  STA $2006
+  LDA #$90              ; column 16 + (4*32)
+  STA $2006
+  LDA #$26              ; center line tile
+  STA $2007
+  
+  LDA $2002             ; read PPU status to reset the high/low latch
+  LDA #$22              ; row 16  
+  STA $2006
+  LDA #$10              ; column 16
+  STA $2006
+  LDA #$26              ; center line tile
+  STA $2007
+
   ; Write attributes
   LDA $2002             ; read PPU status to reset the high/low latch
   LDA #$23
@@ -199,9 +229,13 @@ InitializeGame:
   
   LDA #$60              ; start high in the air (above ground)
   STA bally
+  STA ball2y            ; player 2 same Y position
   
-  LDA #$80
+  LDA #$40              ; player 1 starts on left side
   STA ballx
+  
+  LDA #$C0              ; player 2 starts on right side  
+  STA ball2x
   
   LDA #$02
   STA ballspeedx
@@ -227,7 +261,9 @@ InitializeGame:
   STA velocity_y       ; start with no vertical velocity
   STA jump_pressed     ; no jump pressed initially
   STA jump_counter     ; not jumping initially
-  STA on_ground        ; start in air
+  STA jump_counter2    ; player 2 not jumping initially
+  STA on_ground        ; player 1 start in air
+  STA on_ground2       ; player 2 start in air
 
 ;;;Set initial score value
   LDA #$00
@@ -325,14 +361,15 @@ EnginePlaying:
 
 ; Physics-based player movement
 HandlePlayerMovement:
-  ; Handle horizontal movement (left/right) - ONLY when on ground
+  ; Handle Player 1 horizontal movement - ONLY when on ground
   LDA on_ground
-  BEQ SkipHorizontalMovement  ; if not on ground (jumping OR falling), skip horizontal movement
+  BEQ HandlePlayer2Movement  ; if player 1 not on ground, skip to player 2
 
-MoveBallLeft:
+; Player 1 movement (left side, can move right to center)
+MoveBall1Left:
   LDA buttons1
   AND #%00000010
-  BEQ MoveBallLeftDone   ; left button not pressed
+  BEQ MoveBall1LeftDone   ; left button not pressed
   
   LDA ballx
   SEC
@@ -341,27 +378,69 @@ MoveBallLeft:
   
   LDA ballx
   CMP #LEFTWALL
-  BCS MoveBallLeftDone  ; if ball x > left wall, still on screen
+  BCS MoveBall1LeftDone  ; if ball x > left wall, still on screen
   LDA #LEFTWALL
   STA ballx             ; clamp to left wall
-MoveBallLeftDone:
+MoveBall1LeftDone:
 
-MoveBallRight:
+MoveBall1Right:
   LDA buttons1
   AND #%00000001
-  BEQ MoveBallRightDone   ; right button not pressed
+  BEQ MoveBall1RightDone   ; right button not pressed
 
   LDA ballx
   CLC
   ADC ballspeedx        ; ballx position = ballx + ballspeedx
   STA ballx
 
+  ; Player 1 can't go past center (x = $80)
   LDA ballx
+  CMP #$80
+  BCC MoveBall1RightDone ; if ball x < center, still on left side
+  LDA #$7F
+  STA ballx             ; clamp to just left of center
+MoveBall1RightDone:
+
+HandlePlayer2Movement:
+  ; Handle Player 2 horizontal movement - ONLY when on ground
+  LDA on_ground2
+  BEQ SkipHorizontalMovement  ; if player 2 not on ground, skip horizontal movement
+
+; Player 2 movement (right side, can move left to center)  
+MoveBall2Left:
+  LDA buttons2
+  AND #%00000010
+  BEQ MoveBall2LeftDone   ; left button not pressed
+  
+  LDA ball2x
+  SEC
+  SBC ballspeedx        ; ball2x position = ball2x - ballspeedx
+  STA ball2x
+  
+  ; Player 2 can't go past center (x = $80)
+  LDA ball2x
+  CMP #$80
+  BCS MoveBall2LeftDone  ; if ball x >= center, still on right side
+  LDA #$81
+  STA ball2x             ; clamp to just right of center
+MoveBall2LeftDone:
+
+MoveBall2Right:
+  LDA buttons2
+  AND #%00000001
+  BEQ MoveBall2RightDone   ; right button not pressed
+
+  LDA ball2x
+  CLC
+  ADC ballspeedx        ; ball2x position = ball2x + ballspeedx
+  STA ball2x
+
+  LDA ball2x
   CMP #RIGHTWALL
-  BCC MoveBallRightDone ; if ball x < right wall, still on screen
+  BCC MoveBall2RightDone ; if ball x < right wall, still on screen
   LDA #RIGHTWALL
-  STA ballx             ; clamp to right wall
-MoveBallRightDone:
+  STA ball2x             ; clamp to right wall
+MoveBall2RightDone:
 
 SkipHorizontalMovement:
 
@@ -384,11 +463,11 @@ CheckJumpButton:
   
   LDA buttons1
   AND #%10000000        ; A button for jump (bit 7)
-  BEQ HandleJumpDone    ; A button not pressed
+  BEQ HandleJumpPlayer2    ; Player 1 A button not pressed, check Player 2
   
   ; Check if already jumping or in air
   LDA on_ground
-  BEQ HandleJumpDone    ; can't jump if not on ground
+  BEQ HandleJumpPlayer2    ; can't jump if not on ground, check Player 2
   
   ; Visual debug: A button was pressed - change sprite to tile $34
   LDA #$34
@@ -404,13 +483,29 @@ CheckJumpButton:
   LDA #$01
   STA jump_pressed
 
+HandleJumpPlayer2:
+  ; Check Player 2 jump button
+  LDA buttons2
+  AND #%10000000        ; A button for jump (bit 7)
+  BEQ HandleJumpDone    ; A button not pressed
+  
+  ; Check if player 2 already jumping or in air
+  LDA on_ground2
+  BEQ HandleJumpDone    ; can't jump if not on ground
+  
+  ; Start jump with counter for player 2
+  LDA #JUMP_DURATION    ; jump for specified duration
+  STA jump_counter2
+  LDA #$00
+  STA on_ground2        ; player 2 no longer on ground
+
 HandleJumpDone:
 
   ; SIMPLE COUNTER-BASED PHYSICS
 ApplyPhysics:
-  ; Handle jumping (if jump_counter > 0)
+  ; Handle Player 1 jumping (if jump_counter > 0)
   LDA jump_counter
-  BEQ NotJumping        ; if counter = 0, not jumping
+  BEQ Player1NotJumping        ; if counter = 0, not jumping
   
   ; Still jumping - move up and decrease counter
   DEC jump_counter      ; decrease jump counter
@@ -421,34 +516,33 @@ ApplyPhysics:
   
   ; Check ceiling collision
   CMP #TOPWALL
-  BCS NotJumping        ; if y >= top wall, no ceiling hit
+  BCS Player1NotJumping        ; if y >= top wall, no ceiling hit
   LDA #TOPWALL
   STA bally
   LDA #$00
   STA jump_counter      ; stop jumping
-  JMP ApplyGravity
 
-NotJumping:
-  ; Apply gravity (fall down) if not on ground
+Player1NotJumping:
+  ; Apply gravity to Player 1 (fall down) if not on ground
   LDA on_ground
-  BNE SkipMovement      ; skip if on ground
+  BNE ApplyPhysicsPlayer2      ; skip if on ground
 
-ApplyGravity:
+ApplyGravityPlayer1:
   ; Simple gravity - move down at fall speed
   LDA bally
   CLC
   ADC #FALL_SPEED       ; move down at fall speed
   STA bally
 
-CheckGroundHit:
+CheckGroundHitPlayer1:
   ; Debug: Show current bally position as sprite attribute
   LDA bally
   STA $0202             ; show Y position as sprite color
   
-  ; Check if player hit or passed through the ground
+  ; Check if player 1 hit or passed through the ground
   LDA bally
   CMP #GROUND_Y
-  BCC SkipMovement      ; if y < ground level, still in air
+  BCC ApplyPhysicsPlayer2      ; if y < ground level, still in air
   
   ; Hit ground - land
   LDA #GROUND_Y
@@ -461,6 +555,52 @@ CheckGroundHit:
   ; Debug: Show ground hit with distinctive color
   LDA #$FF
   STA $0202             ; show ground hit with color $FF
+
+ApplyPhysicsPlayer2:
+  ; Handle Player 2 jumping (if jump_counter2 > 0)
+  LDA jump_counter2
+  BEQ Player2NotJumping        ; if counter = 0, not jumping
+  
+  ; Still jumping - move up and decrease counter
+  DEC jump_counter2     ; decrease jump counter
+  LDA ball2y
+  SEC
+  SBC #JUMP_SPEED       ; move up at jump speed
+  STA ball2y
+  
+  ; Check ceiling collision
+  CMP #TOPWALL
+  BCS Player2NotJumping        ; if y >= top wall, no ceiling hit
+  LDA #TOPWALL
+  STA ball2y
+  LDA #$00
+  STA jump_counter2     ; stop jumping
+
+Player2NotJumping:
+  ; Apply gravity to Player 2 (fall down) if not on ground
+  LDA on_ground2
+  BNE SkipMovement      ; skip if on ground
+
+ApplyGravityPlayer2:
+  ; Simple gravity - move down at fall speed
+  LDA ball2y
+  CLC
+  ADC #FALL_SPEED       ; move down at fall speed
+  STA ball2y
+
+CheckGroundHitPlayer2:
+  ; Check if player 2 hit or passed through the ground
+  LDA ball2y
+  CMP #GROUND_Y
+  BCC SkipMovement      ; if y < ground level, still in air
+  
+  ; Hit ground - land
+  LDA #GROUND_Y
+  STA ball2y
+  LDA #$00
+  STA jump_counter2     ; stop any jumping
+  LDA #$01
+  STA on_ground2        ; mark player 2 as on ground
 
 SkipMovement:
 
@@ -635,18 +775,31 @@ HandleCakeMovementDone:
  
  
 UpdateSprites:
-  ; Update player ball sprite (sprite 0)
+  ; Update player 1 sprite (sprite 0)
   LDA bally
   STA $0200
   
-  ; LDA #$00              ; tile 0 for player ball (commented out for debugging)
-  ; STA $0201
+  LDA #$32              ; tile for player 1
+  STA $0201
   
-  ; LDA #$00              ; attributes (commented out for debugging)
-  ; STA $0202
+  LDA #$00              ; attributes (palette 0)
+  STA $0202
   
   LDA ballx
   STA $0203
+  
+  ; Update player 2 sprite (sprite 3) - using sprite 3 to avoid conflicts
+  LDA ball2y
+  STA $020C             ; sprite 3 Y position
+  
+  LDA #$33              ; tile for player 2 (different tile)
+  STA $020D             ; sprite 3 tile
+  
+  LDA #$01              ; attributes (palette 1)
+  STA $020E             ; sprite 3 attributes
+  
+  LDA ball2x
+  STA $020F             ; sprite 3 X position
   
   ; Update falling item sprite (sprite 1)
   LDA itemactive
