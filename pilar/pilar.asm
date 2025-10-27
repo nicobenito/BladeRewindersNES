@@ -24,21 +24,34 @@ paddle1ytop   .rs 1  ; player 1 paddle top vertical position
 paddle2ybot   .rs 1  ; player 2 gamepad bottom vertical position
 buttons1      .rs 1  ; player 1 gamepad buttons, one bit per button
 buttons2      .rs 1  ; player 2 gamepad buttons, one bit per button
-scoreOnes     .rs 1  ; byte for each digit in the decimal score
+scoreOnes     .rs 1  ; byte for each digit in the decimal score (Player 1)
 scoreTens     .rs 1
 scoreHundreds .rs 1
-heartCounter  .rs 1  ; secondary counter (0-4, resets at 5)
-; falling item variables
+heartCounter  .rs 1  ; secondary counter (0-4, resets at 5) (Player 1)
+; Player 2 score variables
+score2Ones    .rs 1  ; byte for each digit in Player 2's decimal score
+score2Tens    .rs 1
+score2Hundreds .rs 1
+heartCounter2 .rs 1  ; secondary counter for Player 2 (0-4, resets at 5)
+; falling item variables (Left Zone - Player 1)
 itemx         .rs 1  ; falling item X position
 itemy         .rs 1  ; falling item Y position
 itemactive    .rs 1  ; 1 = item is falling, 0 = no item
 itemtype      .rs 1  ; 0 = good item (heart), 1 = bad item (broken heart), 2 = cake
 itemspeed     .rs 1  ; falling speed
 randomseed    .rs 1  ; simple random number seed
+; falling item variables (Right Zone - Player 2)
+item2x        .rs 1  ; right zone item X position
+item2y        .rs 1  ; right zone item Y position
+item2active   .rs 1  ; 1 = right zone item is falling, 0 = no item
+item2type     .rs 1  ; 0 = good item (heart), 1 = bad item (broken heart), 2 = cake
+item2speed    .rs 1  ; right zone falling speed
+randomseed2   .rs 1  ; separate random seed for right zone
 ; cake variables
 cakex         .rs 1  ; cake X position
 cakeactive    .rs 1  ; 1 = cake is moving, 0 = no cake
 cakespeed     .rs 1  ; cake horizontal speed
+cakedirection .rs 1  ; 0 = moving right (targets player 2), 1 = moving left (targets player 1)
 ; physics variables
 velocity_y    .rs 1  ; player vertical velocity (signed: $00-$7F = down, $80-$FF = up)
 on_ground     .rs 1  ; 1 = player 1 is on ground, 0 = player 1 is in air
@@ -241,18 +254,28 @@ InitializeGame:
   STA ballspeedx
   STA ballspeedy
 
-;;;Set initial falling item values
+;;;Set initial falling item values (Left Zone)
   LDA #$00
-  STA itemactive       ; no item active at start
+  STA itemactive       ; no left zone item active at start
   STA itemtype         ; start with good item type
   LDA #$02
   STA itemspeed        ; falling speed
   LDA #$01
-  STA randomseed       ; initial seed for random
+  STA randomseed       ; initial seed for left zone random
+
+;;;Set initial falling item values (Right Zone)
+  LDA #$00
+  STA item2active      ; no right zone item active at start
+  STA item2type        ; start with good item type
+  LDA #$02
+  STA item2speed       ; falling speed
+  LDA #$17             ; different initial seed for right zone
+  STA randomseed2      ; initial seed for right zone random
   
 ;;;Set initial cake values
   LDA #$00
   STA cakeactive       ; no cake active at start
+  STA cakedirection    ; initialize direction
   LDA #$02
   STA cakespeed        ; cake horizontal speed
 
@@ -265,12 +288,16 @@ InitializeGame:
   STA on_ground        ; player 1 start in air
   STA on_ground2       ; player 2 start in air
 
-;;;Set initial score value
+;;;Set initial score values
   LDA #$00
   STA scoreOnes
   STA scoreTens
   STA scoreHundreds
-  STA heartCounter      ; start heart counter at 0
+  STA heartCounter      ; start Player 1 heart counter at 0
+  STA score2Ones        ; Player 2 score
+  STA score2Tens
+  STA score2Hundreds
+  STA heartCounter2     ; start Player 2 heart counter at 0
 
 
 ;;:Set starting game state
@@ -358,6 +385,13 @@ EngineGameOver:
 ;;;;;;;;;;;
  
 EnginePlaying:
+  JSR HandlePlayerMovement
+  JSR HandleJump
+  JSR ApplyPhysics
+  JSR HandleFallingItemLeftZone
+  JSR HandleFallingItemRightZone
+  JSR HandleCakeMovement
+  JMP GameEngineDone
 
 ; Physics-based player movement
 HandlePlayerMovement:
@@ -443,6 +477,7 @@ MoveBall2Right:
 MoveBall2RightDone:
 
 SkipHorizontalMovement:
+  RTS
 
   ; Handle jump input (NO BARRIERS - for debugging)
 HandleJump:
@@ -500,6 +535,7 @@ HandleJumpPlayer2:
   STA on_ground2        ; player 2 no longer on ground
 
 HandleJumpDone:
+  RTS
 
   ; SIMPLE COUNTER-BASED PHYSICS
 ApplyPhysics:
@@ -603,9 +639,10 @@ CheckGroundHitPlayer2:
   STA on_ground2        ; mark player 2 as on ground
 
 SkipMovement:
+  RTS
 
-; Handle falling item
-HandleFallingItem:
+; Handle falling item (Left Zone - Player 1)
+HandleFallingItemLeftZone:
   LDA itemactive
   BEQ JumpToSpawnNewItem ; if no item active, try to spawn one
   
@@ -626,53 +663,123 @@ HandleFallingItem:
   JMP HandleFallingItemDone
 
 JumpToSpawnNewItem:
-  JMP SpawnNewItem
+  JMP SpawnNewItemLeftZone
 
 CheckItemCollision:
-  ; Simpler collision detection - check if sprites overlap
-  ; Check X collision (item must be within 16 pixels of player)
+  ; Check collision with Player 1 first
+  JSR CheckPlayer1ItemCollision
+  ; Check collision with Player 2
+  JSR CheckPlayer2ItemCollision
+  JMP NoCollision
+
+CheckPlayer1ItemCollision:
+  ; Check X collision with Player 1
   LDA ballx
   CLC
-  ADC #$08              ; player right edge
+  ADC #$08              ; player 1 right edge
   CMP itemx
-  BCC NoCollision       ; if player right < item left, no collision
+  BCC CheckPlayer1ItemDone       ; if player right < item left, no collision
   
   LDA itemx
   CLC  
   ADC #$08              ; item right edge
   CMP ballx
-  BCC NoCollision       ; if item right < player left, no collision
+  BCC CheckPlayer1ItemDone       ; if item right < player left, no collision
   
-  ; Check Y collision (item must be within 16 pixels of player)
+  ; Check Y collision with Player 1
   LDA bally
   CLC
-  ADC #$08              ; player bottom edge
+  ADC #$08              ; player 1 bottom edge
   CMP itemy
-  BCC NoCollision       ; if player bottom < item top, no collision
+  BCC CheckPlayer1ItemDone       ; if player bottom < item top, no collision
   
   LDA itemy
   CLC
   ADC #$08              ; item bottom edge  
   CMP bally
-  BCC NoCollision       ; if item bottom < player top, no collision
+  BCC CheckPlayer1ItemDone       ; if item bottom < player top, no collision
   
-  ; Collision detected! Check item type
+  ; Player 1 collision detected! Check item type
   LDA itemtype
-  BEQ GoodItemCollision  ; if itemtype = 0, good item
+  BEQ GoodItemCollisionPlayer1  ; if itemtype = 0, good item for Player 1
   CMP #$01
-  BEQ BadItemCollision   ; if itemtype = 1, bad item
-  ; itemtype = 2, cake item
-  JMP CakeItemCollision
+  BEQ BadItemCollisionPlayer1   ; if itemtype = 1, bad item for Player 1
+  ; itemtype = 2, cake item caught by Player 1
+  JMP CakeItemCollisionPlayer1
+
+CheckPlayer1ItemDone:
+  RTS
+
+CheckPlayer2ItemCollision:
+  ; Check X collision with Player 2
+  LDA ball2x
+  CLC
+  ADC #$08              ; player 2 right edge
+  CMP itemx
+  BCC CheckPlayer2ItemDone       ; if player right < item left, no collision
   
-BadItemCollision:
-  ; Bad item (broken heart) - decrement main score and reset heart counter
-  ; JSR DecrementScore
+  LDA itemx
+  CLC  
+  ADC #$08              ; item right edge
+  CMP ball2x
+  BCC CheckPlayer2ItemDone       ; if item right < player left, no collision
+  
+  ; Check Y collision with Player 2
+  LDA ball2y
+  CLC
+  ADC #$08              ; player 2 bottom edge
+  CMP itemy
+  BCC CheckPlayer2ItemDone       ; if player bottom < item top, no collision
+  
+  LDA itemy
+  CLC
+  ADC #$08              ; item bottom edge  
+  CMP ball2y
+  BCC CheckPlayer2ItemDone       ; if item bottom < player top, no collision
+  
+  ; Player 2 collision detected! Check item type
+  LDA itemtype
+  BEQ GoodItemCollisionPlayer2  ; if itemtype = 0, good item for Player 2
+  CMP #$01
+  BEQ BadItemCollisionPlayer2   ; if itemtype = 1, bad item for Player 2
+  ; itemtype = 2, cake item caught by Player 2
+  JMP CakeItemCollisionPlayer2
+
+CheckPlayer2ItemDone:
+  RTS
+  
+BadItemCollisionPlayer1:
+  ; Bad item (broken heart) for Player 1 - check heart counter first
+  LDA heartCounter
+  BEQ BadHeartDecrementScorePlayer1  ; if heart counter is 0, decrement Player 1 score
+  
+  ; Heart counter is not 0, just reset it to 0
   LDA #$00
-  STA heartCounter      ; reset heart counter to 0
+  STA heartCounter      ; reset Player 1 heart counter to 0
+  JMP ItemCollisionDone
+
+BadHeartDecrementScorePlayer1:
+  ; Heart counter was already 0, decrement Player 1 main score
+  JSR DecrementScore    ; decrement Player 1 main score
+  JMP ItemCollisionDone
+
+BadItemCollisionPlayer2:
+  ; Bad item (broken heart) for Player 2 - check heart counter first
+  LDA heartCounter2
+  BEQ BadHeartDecrementScorePlayer2  ; if heart counter is 0, decrement Player 2 score
+  
+  ; Heart counter is not 0, just reset it to 0
+  LDA #$00
+  STA heartCounter2     ; reset Player 2 heart counter to 0
+  JMP ItemCollisionDone
+
+BadHeartDecrementScorePlayer2:
+  ; Heart counter was already 0, decrement Player 2 main score
+  JSR DecrementScore2   ; decrement Player 2 main score
   JMP ItemCollisionDone
   
-GoodItemCollision:
-  ; Good item (heart) - increment heart counter
+GoodItemCollisionPlayer1:
+  ; Good item (heart) for Player 1 - increment heart counter
   LDA heartCounter
   CLC
   ADC #$01
@@ -685,15 +792,44 @@ GoodItemCollision:
   ; Heart counter reached 3 - reset to 0 and increment main score
   LDA #$00
   STA heartCounter      ; reset heart counter to 0
-  JSR IncrementScore    ; add 1 to main score
+  JSR IncrementScore    ; add 1 to Player 1 main score
   JMP ItemCollisionDone
 
-CakeItemCollision:
-  ; Cake collected - start it moving horizontally at floor level
+GoodItemCollisionPlayer2:
+  ; Good item (heart) for Player 2 - increment heart counter
+  LDA heartCounter2
+  CLC
+  ADC #$01
+  STA heartCounter2
+  
+  ; Check if heart counter reached 3
+  CMP #$03
+  BNE ItemCollisionDone ; if not 3, we're done
+  
+  ; Heart counter reached 3 - reset to 0 and increment main score
+  LDA #$00
+  STA heartCounter2     ; reset heart counter to 0
+  JSR IncrementScore2   ; add 1 to Player 2 main score
+  JMP ItemCollisionDone
+
+CakeItemCollisionPlayer1:
+  ; Player 1 caught cake - it moves RIGHT (targets Player 2)
   LDA #$01
   STA cakeactive        ; activate cake
   LDA itemx             ; start cake at the X position where it was caught
   STA cakex
+  LDA #$00              ; 0 = moving right (targets Player 2)
+  STA cakedirection
+  JMP ItemCollisionDone
+
+CakeItemCollisionPlayer2:
+  ; Player 2 caught cake - it moves LEFT (targets Player 1)
+  LDA #$01
+  STA cakeactive        ; activate cake
+  LDA itemx             ; start cake at the X position where it was caught
+  STA cakex
+  LDA #$01              ; 1 = moving left (targets Player 1)
+  STA cakedirection
   ; Cake Y position is fixed at floor level (GROUND_Y)
   
 ItemCollisionDone:
@@ -704,8 +840,8 @@ ItemCollisionDone:
 NoCollision:
   JMP HandleFallingItemDone
 
-SpawnNewItem:
-  ; Generate random numbers for position and type
+SpawnNewItemLeftZone:
+  ; Generate random numbers for position and type (Left Zone)
   LDA randomseed
   CLC
   ADC #$17              ; add prime number
@@ -714,32 +850,28 @@ SpawnNewItem:
   ; Use bits 6-7 to determine item type (0, 1, or 2)
   AND #$C0              ; check bits 6-7
   CMP #$00              ; 00 = good item (heart)
-  BEQ SetGoodItem
+  BEQ SetGoodItemLeft
   CMP #$40              ; 01 = bad item (broken heart)  
-  BEQ SetBadItem
+  BEQ SetBadItemLeft
   ; 10 or 11 = cake
   LDA #$02              ; cake item
-  JMP SetItemType
-SetBadItem:
+  JMP SetItemTypeLeft
+SetBadItemLeft:
   LDA #$01              ; bad item
-  JMP SetItemType
-SetGoodItem:
+  JMP SetItemTypeLeft
+SetGoodItemLeft:
   LDA #$00              ; good item
-SetItemType:
+SetItemTypeLeft:
   STA itemtype
   
-  ; Generate random X position
+  ; Generate random X position (LEFT ZONE ONLY: $10 to $7F)
   LDA randomseed
   CLC
   ADC #$23              ; add another prime number for X position
   STA randomseed
-  AND #$7F              ; keep in range 0-127
+  AND #$3F              ; keep in range 0-63
   CLC
-  ADC #$10              ; add offset to keep away from edges
-  CMP #$E0              ; check if too far right
-  BCC SpawnItemOK
-  LDA #$80              ; if too far, use middle position
-SpawnItemOK:
+  ADC #$10              ; add offset: $10 to $4F (left zone)
   STA itemx
   LDA #TOPWALL
   STA itemy
@@ -747,19 +879,202 @@ SpawnItemOK:
   STA itemactive
 
 HandleFallingItemDone:
+  RTS
+
+; Handle falling item (Right Zone - Player 2)
+HandleFallingItemRightZone:
+  LDA item2active
+  BEQ JumpToSpawnNewItemRight ; if no item active, try to spawn one
+  
+  ; Move item down
+  LDA item2y
+  CLC
+  ADC item2speed
+  STA item2y
+  
+  ; Check if item hit bottom of screen
+  LDA item2y
+  CMP #BOTTOMWALL
+  BCC CheckItem2Collision ; if item y < bottom wall, check collision
+  
+  ; Item hit bottom, destroy it
+  LDA #$00
+  STA item2active
+  JMP HandleFallingItemRightZoneDone
+
+JumpToSpawnNewItemRight:
+  JMP SpawnNewItemRightZone
+
+CheckItem2Collision:
+  ; Right zone items can only be collected by Player 2
+  JSR CheckPlayer2Item2Collision
+  JMP NoCollision2
+
+CheckPlayer2Item2Collision:
+  ; Check X collision with Player 2
+  LDA ball2x
+  CLC
+  ADC #$08              ; player 2 right edge
+  CMP item2x
+  BCC CheckPlayer2Item2Done       ; if player right < item left, no collision
+  
+  LDA item2x
+  CLC  
+  ADC #$08              ; item right edge
+  CMP ball2x
+  BCC CheckPlayer2Item2Done       ; if item right < player left, no collision
+  
+  ; Check Y collision with Player 2
+  LDA ball2y
+  CLC
+  ADC #$08              ; player 2 bottom edge
+  CMP item2y
+  BCC CheckPlayer2Item2Done       ; if player bottom < item top, no collision
+  
+  LDA item2y
+  CLC
+  ADC #$08              ; item bottom edge  
+  CMP ball2y
+  BCC CheckPlayer2Item2Done       ; if item bottom < player top, no collision
+  
+  ; Player 2 collision detected! Check item type
+  LDA item2type
+  BEQ GoodItem2CollisionPlayer2  ; if itemtype = 0, good item for Player 2
+  CMP #$01
+  BEQ BadItem2CollisionPlayer2   ; if itemtype = 1, bad item for Player 2
+  ; itemtype = 2, cake item caught by Player 2
+  JMP CakeItem2CollisionPlayer2
+
+CheckPlayer2Item2Done:
+  RTS
+
+GoodItem2CollisionPlayer2:
+  ; Good item (heart) for Player 2 - increment heart counter
+  LDA heartCounter2
+  CLC
+  ADC #$01
+  STA heartCounter2
+  
+  ; Check if heart counter reached 3
+  CMP #$03
+  BNE Item2CollisionDone ; if not 3, we're done
+  
+  ; Heart counter reached 3 - reset to 0 and increment main score
+  LDA #$00
+  STA heartCounter2     ; reset heart counter to 0
+  JSR IncrementScore2   ; add 1 to Player 2 main score
+  JMP Item2CollisionDone
+
+BadItem2CollisionPlayer2:
+  ; Bad item (broken heart) for Player 2 - check heart counter first
+  LDA heartCounter2
+  BEQ BadHeart2DecrementScorePlayer2  ; if heart counter is 0, decrement Player 2 score
+  
+  ; Heart counter is not 0, just reset it to 0
+  LDA #$00
+  STA heartCounter2     ; reset Player 2 heart counter to 0
+  JMP Item2CollisionDone
+
+BadHeart2DecrementScorePlayer2:
+  ; Heart counter was already 0, decrement Player 2 main score
+  JSR DecrementScore2   ; decrement Player 2 main score
+  JMP Item2CollisionDone
+
+CakeItem2CollisionPlayer2:
+  ; Player 2 caught cake - it moves LEFT (targets Player 1)
+  LDA #$01
+  STA cakeactive        ; activate cake
+  LDA item2x            ; start cake at the X position where it was caught
+  STA cakex
+  LDA #$01              ; 1 = moving left (targets Player 1)
+  STA cakedirection
+  JMP Item2CollisionDone
+
+Item2CollisionDone:
+  LDA #$00
+  STA item2active
+  JMP HandleFallingItemRightZoneDone
+
+NoCollision2:
+  JMP HandleFallingItemRightZoneDone
+
+SpawnNewItemRightZone:
+  ; Generate random numbers for position and type (Right Zone)
+  LDA randomseed2
+  CLC
+  ADC #$17              ; add prime number
+  STA randomseed2
+  
+  ; Use bits 6-7 to determine item type (0, 1, or 2)
+  AND #$C0              ; check bits 6-7
+  CMP #$00              ; 00 = good item (heart)
+  BEQ SetGoodItemRight
+  CMP #$40              ; 01 = bad item (broken heart)  
+  BEQ SetBadItemRight
+  ; 10 or 11 = cake
+  LDA #$02              ; cake item
+  JMP SetItemTypeRight
+SetBadItemRight:
+  LDA #$01              ; bad item
+  JMP SetItemTypeRight
+SetGoodItemRight:
+  LDA #$00              ; good item
+SetItemTypeRight:
+  STA item2type
+  
+  ; Generate random X position (RIGHT ZONE ONLY: $81 to $E0)
+  LDA randomseed2
+  CLC
+  ADC #$23              ; add another prime number for X position
+  STA randomseed2
+  AND #$3F              ; keep in range 0-63
+  CLC
+  ADC #$81              ; add offset: $81 to $C0 (right zone)
+  STA item2x
+  LDA #TOPWALL
+  STA item2y
+  LDA #$01
+  STA item2active
+
+HandleFallingItemRightZoneDone:
+  RTS
 
 ; Handle cake movement
 HandleCakeMovement:
   LDA cakeactive
   BEQ HandleCakeMovementDone  ; if no cake active, skip
   
+  ; Check collision with players first (before moving)
+  JSR CheckCakePlayerCollision
+  
+  ; Move cake based on direction
+  LDA cakedirection
+  BEQ MoveCakeRight     ; if direction = 0, move right
+  
+MoveCakeLeft:
+  ; Move cake to the left
+  LDA cakex
+  SEC
+  SBC cakespeed
+  STA cakex
+  
+  ; Check if cake moved off left edge
+  CMP #$04              ; left edge
+  BCS HandleCakeMovementDone
+  
+  ; Cake moved off screen, deactivate it
+  LDA #$00
+  STA cakeactive
+  JMP HandleCakeMovementDone
+
+MoveCakeRight:
   ; Move cake to the right
   LDA cakex
   CLC
   ADC cakespeed
   STA cakex
   
-  ; Check if cake moved off screen
+  ; Check if cake moved off right edge
   CMP #$F8              ; right edge + some margin
   BCC HandleCakeMovementDone
   
@@ -768,8 +1083,74 @@ HandleCakeMovement:
   STA cakeactive
 
 HandleCakeMovementDone:
+  RTS
 
-  JMP GameEngineDone
+CheckCakePlayerCollision:
+  ; Check collision based on cake direction (target player only)
+  LDA cakedirection
+  BEQ CheckPlayer2CakeCollision  ; if direction = 0 (right), check Player 2
+  
+CheckPlayer1CakeCollision:
+  ; Cake moving left - only check Player 1 collision
+  LDA on_ground
+  BEQ CakeCollisionDone  ; if Player 1 not on ground, no collision
+  
+  ; Check X collision with Player 1
+  LDA ballx
+  CLC
+  ADC #$08              ; player 1 right edge
+  CMP cakex
+  BCC CakeCollisionDone  ; if player right < cake left, no collision
+  
+  LDA cakex
+  CLC  
+  ADC #$08              ; cake right edge
+  CMP ballx
+  BCC CakeCollisionDone  ; if cake right < player left, no collision
+  
+  ; Check Y collision with Player 1 (both should be at ground level)
+  LDA bally
+  CMP #GROUND_Y
+  BNE CakeCollisionDone  ; if Player 1 not at ground level, no collision
+  
+  ; Collision detected with Player 1!
+  JSR DecrementScore    ; Player 1 loses a point
+  LDA #$00
+  STA heartCounter      ; reset Player 1 heart counter to 0
+  STA cakeactive        ; destroy the cake
+  RTS
+
+CheckPlayer2CakeCollision:
+  ; Cake moving right - only check Player 2 collision
+  LDA on_ground2
+  BEQ CakeCollisionDone  ; if Player 2 not on ground, no collision possible
+  
+  ; Check X collision with Player 2
+  LDA ball2x
+  CLC
+  ADC #$08              ; player 2 right edge
+  CMP cakex
+  BCC CakeCollisionDone  ; if player right < cake left, no collision
+  
+  LDA cakex
+  CLC  
+  ADC #$08              ; cake right edge
+  CMP ball2x
+  BCC CakeCollisionDone  ; if cake right < player left, no collision
+  
+  ; Check Y collision with Player 2 (both should be at ground level)
+  LDA ball2y
+  CMP #GROUND_Y
+  BNE CakeCollisionDone  ; if Player 2 not at ground level, no collision
+  
+  ; Collision detected with Player 2!
+  JSR DecrementScore2   ; Player 2 loses a point
+  LDA #$00
+  STA heartCounter2     ; reset Player 2 heart counter to 0
+  STA cakeactive        ; destroy the cake
+
+CakeCollisionDone:
+  RTS
  
  
  
@@ -801,7 +1182,7 @@ UpdateSprites:
   LDA ball2x
   STA $020F             ; sprite 3 X position
   
-  ; Update falling item sprite (sprite 1)
+  ; Update falling item sprite (sprite 1) - Left Zone
   LDA itemactive
   BEQ HideItemSprite    ; if item not active, hide sprite
   
@@ -810,18 +1191,18 @@ UpdateSprites:
   
   ; Set tile based on item type
   LDA itemtype
-  BEQ SetGoodItemTile   ; if itemtype = 0, use tile 1 (heart)
+  BEQ SetGoodItemTileLeft   ; if itemtype = 0, use tile 1 (heart)
   CMP #$01
-  BEQ SetBadItemTile    ; if itemtype = 1, use tile 2 (broken heart)
+  BEQ SetBadItemTileLeft    ; if itemtype = 1, use tile 2 (broken heart)
   ; itemtype = 2, cake
   LDA #$A0              ; cake uses tile $A0
-  JMP SetItemTile
-SetBadItemTile:
+  JMP SetItemTileLeft
+SetBadItemTileLeft:
   LDA #$02              ; bad item uses tile 2 (broken heart)
-  JMP SetItemTile
-SetGoodItemTile:
+  JMP SetItemTileLeft
+SetGoodItemTileLeft:
   LDA #$01              ; good item uses tile 1 (heart)
-SetItemTile:
+SetItemTileLeft:
   STA $0205
   
   LDA #$01              ; attributes (different palette)
@@ -829,7 +1210,7 @@ SetItemTile:
   
   LDA itemx
   STA $0207             ; sprite 1 X position
-  JMP UpdateCakeSprite
+  JMP UpdateRightZoneItemSprite
 
 HideItemSprite:
   LDA #$FF              ; move sprite off screen
@@ -837,6 +1218,44 @@ HideItemSprite:
   STA $0205
   STA $0206  
   STA $0207
+
+UpdateRightZoneItemSprite:
+  ; Update falling item sprite (sprite 4) - Right Zone
+  LDA item2active
+  BEQ HideItem2Sprite    ; if item not active, hide sprite
+  
+  LDA item2y
+  STA $0210             ; sprite 4 Y position
+  
+  ; Set tile based on item type
+  LDA item2type
+  BEQ SetGoodItemTileRight   ; if itemtype = 0, use tile 1 (heart)
+  CMP #$01
+  BEQ SetBadItemTileRight    ; if itemtype = 1, use tile 2 (broken heart)
+  ; itemtype = 2, cake
+  LDA #$A0              ; cake uses tile $A0
+  JMP SetItemTileRight
+SetBadItemTileRight:
+  LDA #$02              ; bad item uses tile 2 (broken heart)
+  JMP SetItemTileRight
+SetGoodItemTileRight:
+  LDA #$01              ; good item uses tile 1 (heart)
+SetItemTileRight:
+  STA $0211
+  
+  LDA #$02              ; attributes (different palette)
+  STA $0212
+  
+  LDA item2x
+  STA $0213             ; sprite 4 X position
+  JMP UpdateCakeSprite
+
+HideItem2Sprite:
+  LDA #$FF              ; move sprite off screen
+  STA $0210
+  STA $0211
+  STA $0212  
+  STA $0213
 
 UpdateCakeSprite:
   ; Update cake sprite (sprite 2)
@@ -868,12 +1287,12 @@ UpdateSpritesDone:
  
  
 DrawScore:
-  ; Draw main score at PPU $2020
+  ; Draw Player 1 score at PPU $2020 (top left)
   LDA $2002
   LDA #$20
   STA $2006
   LDA #$20
-  STA $2006          ; start drawing the score at PPU $2020
+  STA $2006          ; start drawing Player 1 score at PPU $2020
   
   LDA scoreHundreds  ; get first digit
   STA $2007          ; draw to background
@@ -882,14 +1301,38 @@ DrawScore:
   LDA scoreOnes      ; last digit
   STA $2007
   
-  ; Draw heart counter at PPU $2028 (offset by 8 tiles)
+  ; Draw Player 1 heart counter at PPU $2028 (offset by 8 tiles)
   LDA $2002
   LDA #$20
   STA $2006
   LDA #$28
-  STA $2006          ; start drawing heart counter at PPU $2028
+  STA $2006          ; start drawing Player 1 heart counter at PPU $2028
   
-  LDA heartCounter   ; get heart counter value
+  LDA heartCounter   ; get Player 1 heart counter value
+  STA $2007          ; draw heart counter to background
+  
+  ; Draw Player 2 score at PPU $203C (top right)
+  LDA $2002
+  LDA #$20
+  STA $2006
+  LDA #$3C
+  STA $2006          ; start drawing Player 2 score at PPU $203C
+  
+  LDA score2Hundreds ; get Player 2 first digit
+  STA $2007          ; draw to background
+  LDA score2Tens     ; next digit
+  STA $2007
+  LDA score2Ones     ; last digit
+  STA $2007
+  
+  ; Draw Player 2 heart counter at PPU $2034 (offset by -8 tiles from score)
+  LDA $2002
+  LDA #$20
+  STA $2006
+  LDA #$34
+  STA $2006          ; start drawing Player 2 heart counter at PPU $2034
+  
+  LDA heartCounter2  ; get Player 2 heart counter value
   STA $2007          ; draw heart counter to background
   
   RTS
@@ -962,7 +1405,72 @@ DecHundredsOK:
 DecDone:
   RTS
 
+IncrementScore2:
+IncOnes2:
+  LDA score2Ones      ; load the lowest digit of Player 2's number
+  CLC 
+  ADC #$01           ; add one
+  STA score2Ones
+  CMP #$0A           ; check if it overflowed, now equals 10
+  BNE IncDone2        ; if there was no overflow, all done
+IncTens2:
+  LDA #$00
+  STA score2Ones      ; wrap digit to 0
+  LDA score2Tens      ; load the next digit
+  CLC 
+  ADC #$01           ; add one, the carry from previous digit
+  STA score2Tens
+  CMP #$0A           ; check if it overflowed, now equals 10
+  BNE IncDone2        ; if there was no overflow, all done
+IncHundreds2:
+  LDA #$00
+  STA score2Tens      ; wrap digit to 0
+  LDA score2Hundreds  ; load the next digit
+  CLC 
+  ADC #$01           ; add one, the carry from previous digit
+  STA score2Hundreds
+IncDone2:
+  RTS
 
+DecrementScore2:
+DecOnes2:
+  LDA score2Ones      ; load the lowest digit of Player 2's number
+  SEC 
+  SBC #$01           ; subtract one
+  BPL DecOnesOK2      ; if result >= 0, we're done with ones
+  LDA #$09           ; wrap to 9
+  STA score2Ones
+  JMP DecTens2        ; need to borrow from tens
+DecOnesOK2:
+  STA score2Ones
+  JMP DecDone2        ; done, no borrowing needed
+
+DecTens2:
+  LDA score2Tens      ; load the tens digit
+  SEC 
+  SBC #$01           ; subtract one (borrow)
+  BPL DecTensOK2      ; if result >= 0, we're done
+  LDA #$09           ; wrap to 9
+  STA score2Tens
+  JMP DecHundreds2    ; need to borrow from hundreds
+DecTensOK2:
+  STA score2Tens
+  JMP DecDone2
+
+DecHundreds2:
+  LDA score2Hundreds  ; load the hundreds digit
+  SEC 
+  SBC #$01           ; subtract one (borrow)
+  BPL DecHundredsOK2  ; if result >= 0, we're done
+  LDA #$00           ; can't go below 0, clamp to 000
+  STA score2Hundreds
+  STA score2Tens
+  STA score2Ones
+  JMP DecDone2
+DecHundredsOK2:
+  STA score2Hundreds
+DecDone2:
+  RTS
 
 
   
