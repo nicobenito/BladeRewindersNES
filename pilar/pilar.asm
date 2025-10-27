@@ -59,12 +59,18 @@ on_ground2    .rs 1  ; 1 = player 2 is on ground, 0 = player 2 is in air
 jump_pressed  .rs 1  ; 1 = jump button was pressed this frame
 jump_counter  .rs 1  ; frames remaining in jump (0 = not jumping)
 jump_counter2 .rs 1  ; frames remaining in jump for player 2 (0 = not jumping)
+; progressive speed system
+speed_level   .rs 1  ; current speed level (0-3)
+total_score   .rs 1  ; combined score of both players for speed calculation
+; win condition system
+winner        .rs 1  ; 0 = no winner, 1 = player 1 wins, 2 = player 2 wins
 
 
 ;; DECLARE SOME CONSTANTS HERE
 STATETITLE     = $00  ; displaying title screen
 STATEPLAYING   = $01  ; move paddles/ball, check for collisions
 STATEGAMEOVER  = $02  ; displaying game over screen
+STATEWINSCREEN = $03  ; displaying winner screen
   
 RIGHTWALL      = $F4  ; when ball reaches one of these, do something
 TOPWALL        = $20
@@ -233,6 +239,9 @@ LoadAttributeLoop:
   RTS
 
 InitializeGame:
+  ; Clear any win message from previous game
+  JSR ClearWinMessage
+
 ;;;Set some initial ball stats (now player controlled)
   LDA #$00
   STA balldown
@@ -287,6 +296,9 @@ InitializeGame:
   STA jump_counter2    ; player 2 not jumping initially
   STA on_ground        ; player 1 start in air
   STA on_ground2       ; player 2 start in air
+  STA speed_level      ; start at speed level 0
+  STA total_score      ; start with combined score 0
+  STA winner           ; no winner at start
 
 ;;;Set initial score values
   LDA #$00
@@ -350,6 +362,10 @@ GameEngine:
   BEQ EngineGameOver  ;;game is displaying ending screen
   
   LDA gamestate
+  CMP #STATEWINSCREEN
+  BEQ EngineWinScreen  ;;game is displaying winner screen
+  
+  LDA gamestate
   CMP #STATEPLAYING
   BEQ EnginePlaying   ;;game is playing
 GameEngineDone:  
@@ -381,13 +397,30 @@ EngineGameOver:
   ;;  go to Title State
   ;;  turn screen on 
   JMP GameEngineDone
+
+EngineWinScreen:
+  ; Check if start button pressed to restart game
+  LDA buttons1
+  AND #%00010000        ; Start button (bit 4)
+  BNE RestartGame       ; Player 1 start pressed
+  
+  LDA buttons2
+  AND #%00010000        ; Start button (bit 4)
+  BNE RestartGame       ; Player 2 start pressed
+  
+  JMP GameEngineDone    ; no start pressed, stay in win screen
+
+RestartGame:
+  ; Reset game to initial state
+  JMP InitializeGame    ; restart the entire game
  
 ;;;;;;;;;;;
- 
+
 EnginePlaying:
   JSR HandlePlayerMovement
   JSR HandleJump
   JSR ApplyPhysics
+  JSR UpdateProgressiveSpeed
   JSR HandleFallingItemLeftZone
   JSR HandleFallingItemRightZone
   JSR HandleCakeMovement
@@ -646,7 +679,9 @@ HandleFallingItemLeftZone:
   LDA itemactive
   BEQ JumpToSpawnNewItem ; if no item active, try to spawn one
   
-  ; Move item down
+  ; Move item down (using progressive speed)
+  JSR GetCurrentItemSpeed  ; get current speed in A
+  STA itemspeed            ; update itemspeed variable
   LDA itemy
   CLC
   ADC itemspeed
@@ -886,7 +921,9 @@ HandleFallingItemRightZone:
   LDA item2active
   BEQ JumpToSpawnNewItemRight ; if no item active, try to spawn one
   
-  ; Move item down
+  ; Move item down (using progressive speed)
+  JSR GetCurrentItemSpeed  ; get current speed in A
+  STA item2speed           ; update item2speed variable
   LDA item2y
   CLC
   ADC item2speed
@@ -1287,6 +1324,11 @@ UpdateSpritesDone:
  
  
 DrawScore:
+  ; Check if we're in win screen state
+  LDA gamestate
+  CMP #STATEWINSCREEN
+  BEQ DrawWinMessage
+  
   ; Draw Player 1 score at PPU $2020 (top left)
   LDA $2002
   LDA #$20
@@ -1334,6 +1376,94 @@ DrawScore:
   
   LDA heartCounter2  ; get Player 2 heart counter value
   STA $2007          ; draw heart counter to background
+  
+  RTS
+
+DrawWinMessage:
+  ; Clear the top area and draw winner message
+  LDA $2002
+  LDA #$20
+  STA $2006
+  LDA #$40              ; middle of top row
+  STA $2006
+  
+  ; Check which player won
+  LDA winner
+  CMP #$01
+  BEQ DrawPlayer1Wins
+  
+  ; Player 2 wins message "P2 WINS!"
+  LDA #$19              ; 'P' (tile $19)
+  STA $2007
+  LDA #$02              ; '2' (tile $02)  
+  STA $2007
+  LDA #$24              ; space (tile $24)
+  STA $2007
+  LDA #$20              ; 'W' (tile $20)
+  STA $2007
+  LDA #$12              ; 'I' (tile $12)
+  STA $2007
+  LDA #$17              ; 'N' (tile $17)
+  STA $2007
+  LDA #$1C              ; 'S' (tile $1C)
+  STA $2007
+  LDA #$0A              ; '!' (tile $0A)
+  STA $2007
+  JMP DrawRestartMessage
+
+DrawPlayer1Wins:
+  ; Player 1 wins message "P1 WINS!"
+  LDA #$19              ; 'P' (tile $19)
+  STA $2007
+  LDA #$01              ; '1' (tile $01)
+  STA $2007
+  LDA #$24              ; space (tile $24)
+  STA $2007
+  LDA #$20              ; 'W' (tile $20)
+  STA $2007
+  LDA #$12              ; 'I' (tile $12)
+  STA $2007
+  LDA #$17              ; 'N' (tile $17)
+  STA $2007
+  LDA #$1C              ; 'S' (tile $1C)
+  STA $2007
+  LDA #$2B              ; '!' (tile $0A)
+  STA $2007
+
+DrawRestartMessage:
+  ; Just return - no "PRESS START" message needed
+  RTS
+
+ClearWinMessage:
+  ; Clear the win message area by filling with spaces
+  LDA $2002
+  LDA #$20
+  STA $2006
+  LDA #$40              ; start at middle of top row
+  STA $2006
+  
+  ; Clear 8 tiles for "P1 WINS!" message
+  LDX #$08
+ClearWinLoop1:
+  LDA #$24              ; space tile
+  STA $2007
+  DEX
+  BNE ClearWinLoop1
+  
+  ; Clear the "PRESS START" message area
+  LDA $2002
+  LDA #$20
+  STA $2006
+  LDA #$80              ; next row
+  STA $2006
+  
+  ; Clear 11 tiles for "PRESS START" message
+  LDX #$0B
+ClearWinLoop2:
+  LDA #$24              ; space tile
+  STA $2007
+  DEX
+  BNE ClearWinLoop2
   
   RTS
  
@@ -1395,7 +1525,12 @@ DecHundreds:
   SEC 
   SBC #$01           ; subtract one (borrow)
   BPL DecHundredsOK  ; if result >= 0, we're done
-  LDA #$00           ; can't go below 0, clamp to 000
+  ; Player 1 score went negative - Player 2 wins!
+  LDA #$02           ; Player 2 wins
+  STA winner
+  LDA #STATEWINSCREEN
+  STA gamestate
+  LDA #$00           ; clamp score to 000
   STA scoreHundreds
   STA scoreTens
   STA scoreOnes
@@ -1462,7 +1597,12 @@ DecHundreds2:
   SEC 
   SBC #$01           ; subtract one (borrow)
   BPL DecHundredsOK2  ; if result >= 0, we're done
-  LDA #$00           ; can't go below 0, clamp to 000
+  ; Player 2 score went negative - Player 1 wins!
+  LDA #$01           ; Player 1 wins
+  STA winner
+  LDA #STATEWINSCREEN
+  STA gamestate
+  LDA #$00           ; clamp score to 000
   STA score2Hundreds
   STA score2Tens
   STA score2Ones
@@ -1470,6 +1610,58 @@ DecHundreds2:
 DecHundredsOK2:
   STA score2Hundreds
 DecDone2:
+  RTS
+
+UpdateProgressiveSpeed:
+  ; Calculate total score (Player 1 + Player 2)
+  ; For simplicity, we'll use just the ones digits
+  LDA scoreOnes
+  CLC
+  ADC score2Ones
+  STA total_score
+  
+  ; Determine speed level based on total score
+  CMP #$05              ; 5 points
+  BCC SpeedLevel0       ; if < 5, stay at level 0
+  CMP #$0A              ; 10 points  
+  BCC SpeedLevel1       ; if < 10, go to level 1
+  CMP #$14              ; 20 points (hex $14 = decimal 20)
+  BCC SpeedLevel2       ; if < 20, go to level 2
+  ; else level 3
+  LDA #$03
+  JMP SetSpeedLevel
+SpeedLevel2:
+  LDA #$02
+  JMP SetSpeedLevel
+SpeedLevel1:
+  LDA #$01
+  JMP SetSpeedLevel
+SpeedLevel0:
+  LDA #$00
+SetSpeedLevel:
+  STA speed_level
+  RTS
+
+GetCurrentItemSpeed:
+  ; Return current item speed in A register based on speed_level
+  LDA speed_level
+  CMP #$00
+  BEQ Speed0
+  CMP #$01  
+  BEQ Speed1
+  CMP #$02
+  BEQ Speed2
+  ; Speed level 3
+  LDA #$05              ; 5 pixels/frame (fastest)
+  RTS
+Speed2:
+  LDA #$04              ; 4 pixels/frame
+  RTS
+Speed1:
+  LDA #$03              ; 3 pixels/frame  
+  RTS
+Speed0:
+  LDA #$02              ; 2 pixels/frame (normal)
   RTS
 
 
