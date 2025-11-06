@@ -64,6 +64,10 @@ speed_level   .rs 1  ; current speed level (0-3)
 total_score   .rs 1  ; combined score of both players for speed calculation
 ; win condition system
 winner        .rs 1  ; 0 = no winner, 1 = player 1 wins, 2 = player 2 wins
+p1_anim_frame .rs 1  ; Player 1 animation frame (0 or 1)
+p1_anim_timer .rs 1  ; Player 1 animation timer
+p2_anim_frame .rs 1  ; Player 2 animation frame (0 or 1)  
+p2_anim_timer .rs 1  ; Player 2 animation timer
 
 
 ;; DECLARE SOME CONSTANTS HERE
@@ -87,6 +91,7 @@ JUMP_SPEED     = $05  ; pixels per frame when jumping up
 JUMP_DURATION  = $15  ; frames to jump upward (48 frames)
 FALL_SPEED     = $02  ; pixels per frame when falling down
 GROUND_Y       = $D0  ; Y position of ground (higher level)
+ANIM_SPEED     = $08  ; frames per animation frame (slower = higher number)
 
 ;;;;;;;;;;;;;;;;;;
 
@@ -299,6 +304,10 @@ InitializeGame:
   STA speed_level      ; start at speed level 0
   STA total_score      ; start with combined score 0
   STA winner           ; no winner at start
+  STA p1_anim_frame    ; start Player 1 animation at frame 0
+  STA p1_anim_timer    ; start Player 1 animation timer at 0
+  STA p2_anim_frame    ; start Player 2 animation at frame 0
+  STA p2_anim_timer    ; start Player 2 animation timer at 0
 
 ;;;Set initial score values
   LDA #$00
@@ -420,6 +429,7 @@ EnginePlaying:
   JSR HandlePlayerMovement
   JSR HandleJump
   JSR ApplyPhysics
+  JSR UpdatePlayerAnimation
   JSR UpdateProgressiveSpeed
   JSR HandleFallingItemLeftZone
   JSR HandleFallingItemRightZone
@@ -672,6 +682,63 @@ CheckGroundHitPlayer2:
   STA on_ground2        ; mark player 2 as on ground
 
 SkipMovement:
+  RTS
+
+UpdatePlayerAnimation:
+  ; Update Player 1 animation
+  ; Check if Player 1 is moving horizontally
+  LDA buttons1
+  AND #%00000011        ; check left and right buttons
+  BEQ Player1NotMoving  ; if no horizontal movement, reset animation
+  
+  ; Player 1 is moving - update animation timer
+  INC p1_anim_timer
+  LDA p1_anim_timer
+  CMP #ANIM_SPEED       ; check if it's time to change frame
+  BCC UpdatePlayer2Anim ; if timer < ANIM_SPEED, don't change frame yet
+  
+  ; Time to change frame
+  LDA #$00
+  STA p1_anim_timer     ; reset timer
+  LDA p1_anim_frame
+  EOR #$01              ; flip between 0 and 1
+  STA p1_anim_frame
+  JMP UpdatePlayer2Anim
+
+Player1NotMoving:
+  ; Reset Player 1 animation to frame 0 when not moving
+  LDA #$00
+  STA p1_anim_frame
+  STA p1_anim_timer
+
+UpdatePlayer2Anim:
+  ; Update Player 2 animation
+  ; Check if Player 2 is moving horizontally
+  LDA buttons2
+  AND #%00000011        ; check left and right buttons
+  BEQ Player2NotMoving  ; if no horizontal movement, reset animation
+  
+  ; Player 2 is moving - update animation timer
+  INC p2_anim_timer
+  LDA p2_anim_timer
+  CMP #ANIM_SPEED       ; check if it's time to change frame
+  BCC UpdateAnimationDone ; if timer < ANIM_SPEED, don't change frame yet
+  
+  ; Time to change frame
+  LDA #$00
+  STA p2_anim_timer     ; reset timer
+  LDA p2_anim_frame
+  EOR #$01              ; flip between 0 and 1
+  STA p2_anim_frame
+  JMP UpdateAnimationDone
+
+Player2NotMoving:
+  ; Reset Player 2 animation to frame 0 when not moving
+  LDA #$00
+  STA p2_anim_frame
+  STA p2_anim_timer
+
+UpdateAnimationDone:
   RTS
 
 ; Handle falling item (Left Zone - Player 1)
@@ -1188,43 +1255,133 @@ CheckPlayer2CakeCollision:
 
 CakeCollisionDone:
   RTS
- 
- 
- 
- 
-UpdateSprites:
-  ; Update player 1 sprite (sprite 0)
+
+UpdatePlayer1Sprites:
+  ; Player 1 16x16 character (sprites 0-3)
+  ; Set Y positions for all sprites first
   LDA bally
-  STA $0200
-  
-  LDA #$32              ; tile for player 1
-  STA $0201
-  
-  LDA #$00              ; attributes (palette 0)
-  STA $0202
-  
-  LDA ballx
-  STA $0203
-  
-  ; Update player 2 sprite (sprite 3) - using sprite 3 to avoid conflicts
-  LDA ball2y
+  STA $0200             ; sprite 0 Y position
+  STA $0204             ; sprite 1 Y position
+  CLC
+  ADC #$08              ; Y position + 8 pixels for bottom sprites
+  STA $0208             ; sprite 2 Y position
   STA $020C             ; sprite 3 Y position
   
-  LDA #$33              ; tile for player 2 (different tile)
-  STA $020D             ; sprite 3 tile
-  
-  LDA #$01              ; attributes (palette 1)
-  STA $020E             ; sprite 3 attributes
-  
-  LDA ball2x
+  ; Set X positions for all sprites
+  LDA ballx
+  STA $0203             ; sprite 0 X position
+  STA $020B             ; sprite 2 X position
+  CLC
+  ADC #$08              ; X position + 8 pixels for right sprites
+  STA $0207             ; sprite 1 X position
   STA $020F             ; sprite 3 X position
   
-  ; Update falling item sprite (sprite 1) - Left Zone
+  ; Set attributes (all use palette 0)
+  LDA #$00
+  STA $0202             ; sprite 0 attributes
+  STA $0206             ; sprite 1 attributes
+  STA $020A             ; sprite 2 attributes
+  STA $020E             ; sprite 3 attributes
+  
+  ; Set tiles based on animation frame
+  LDA p1_anim_frame
+  BEQ Player1StandingTiles
+  
+Player1WalkingTiles:
+  ; Walking animation tiles
+  LDA #$08              ; tile 08 (top-left walking)
+  STA $0201
+  LDA #$09              ; tile 09 (top-right walking)
+  STA $0205
+  LDA #$18              ; tile 18 (bottom-left walking)
+  STA $0209
+  LDA #$19              ; tile 19 (bottom-right walking)
+  STA $020D
+  RTS
+  
+Player1StandingTiles:
+  ; Standing animation tiles
+  LDA #$04              ; tile 04 (top-left standing)
+  STA $0201
+  LDA #$05              ; tile 05 (top-right standing)
+  STA $0205
+  LDA #$14              ; tile 14 (bottom-left standing)
+  STA $0209
+  LDA #$15              ; tile 15 (bottom-right standing)
+  STA $020D
+  RTS
+
+UpdatePlayer2Sprites:
+  ; Player 2 16x16 character (sprites 4-7)
+  ; Set Y positions for all sprites first
+  LDA ball2y
+  STA $0210             ; sprite 4 Y position
+  STA $0214             ; sprite 5 Y position
+  CLC
+  ADC #$08              ; Y position + 8 pixels for bottom sprites
+  STA $0218             ; sprite 6 Y position
+  STA $021C             ; sprite 7 Y position
+  
+  ; Set X positions for all sprites
+  LDA ball2x
+  STA $0213             ; sprite 4 X position
+  STA $021B             ; sprite 6 X position
+  CLC
+  ADC #$08              ; X position + 8 pixels for right sprites
+  STA $0217             ; sprite 5 X position
+  STA $021F             ; sprite 7 X position
+  
+  ; Set attributes (all use palette 1)
+  LDA #$01
+  STA $0212             ; sprite 4 attributes
+  STA $0216             ; sprite 5 attributes
+  STA $021A             ; sprite 6 attributes
+  STA $021E             ; sprite 7 attributes
+  
+  ; Set tiles based on animation frame
+  LDA p2_anim_frame
+  BEQ Player2StandingTiles
+  
+Player2WalkingTiles:
+  ; Walking animation tiles
+  LDA #$0A              ; tile 0A (top-left walking)
+  STA $0211
+  LDA #$0B              ; tile 0B (top-right walking)
+  STA $0215
+  LDA #$1A              ; tile 1A (bottom-left walking)
+  STA $0219
+  LDA #$1B              ; tile 1B (bottom-right walking)
+  STA $021D
+  RTS
+  
+Player2StandingTiles:
+  ; Standing animation tiles
+  LDA #$06              ; tile 06 (top-left standing)
+  STA $0211
+  LDA #$07              ; tile 07 (top-right standing)
+  STA $0215
+  LDA #$16              ; tile 16 (bottom-left standing)
+  STA $0219
+  LDA #$17              ; tile 17 (bottom-right standing)
+  STA $021D
+  RTS
+ 
+ 
+
+
+UpdateSprites:
+  ; Update Player 1 (16x16 character using sprites 0-3)
+  JSR UpdatePlayer1Sprites
+  
+  ; Update Player 2 (16x16 character using sprites 4-7)  
+  JSR UpdatePlayer2Sprites
+  
+  ; Update falling item sprite (sprite 8) - Left Zone
   LDA itemactive
   BEQ HideItemSprite    ; if item not active, hide sprite
   
   LDA itemy
-  STA $0204             ; sprite 1 Y position
+  STA $0220             ; sprite 8 Y position
   
   ; Set tile based on item type
   LDA itemtype
@@ -1240,29 +1397,29 @@ SetBadItemTileLeft:
 SetGoodItemTileLeft:
   LDA #$01              ; good item uses tile 1 (heart)
 SetItemTileLeft:
-  STA $0205
+  STA $0221
   
   LDA #$01              ; attributes (different palette)
-  STA $0206
+  STA $0222
   
   LDA itemx
-  STA $0207             ; sprite 1 X position
+  STA $0223             ; sprite 8 X position
   JMP UpdateRightZoneItemSprite
 
 HideItemSprite:
   LDA #$FF              ; move sprite off screen
-  STA $0204
-  STA $0205
-  STA $0206  
-  STA $0207
+  STA $0220
+  STA $0221
+  STA $0222  
+  STA $0223
 
 UpdateRightZoneItemSprite:
-  ; Update falling item sprite (sprite 4) - Right Zone
+  ; Update falling item sprite (sprite 10) - Right Zone
   LDA item2active
   BEQ HideItem2Sprite    ; if item not active, hide sprite
   
   LDA item2y
-  STA $0210             ; sprite 4 Y position
+  STA $0228             ; sprite 10 Y position
   
   ; Set tile based on item type
   LDA item2type
@@ -1278,46 +1435,46 @@ SetBadItemTileRight:
 SetGoodItemTileRight:
   LDA #$01              ; good item uses tile 1 (heart)
 SetItemTileRight:
-  STA $0211
+  STA $0229
   
   LDA #$02              ; attributes (different palette)
-  STA $0212
+  STA $022A
   
   LDA item2x
-  STA $0213             ; sprite 4 X position
+  STA $022B             ; sprite 10 X position
   JMP UpdateCakeSprite
 
 HideItem2Sprite:
   LDA #$FF              ; move sprite off screen
-  STA $0210
-  STA $0211
-  STA $0212  
-  STA $0213
+  STA $0228
+  STA $0229
+  STA $022A  
+  STA $022B
 
 UpdateCakeSprite:
-  ; Update cake sprite (sprite 2)
+  ; Update cake sprite (sprite 9)
   LDA cakeactive
   BEQ HideCakeSprite    ; if cake not active, hide sprite
   
   LDA #GROUND_Y         ; cake Y position at floor level
-  STA $0208             ; sprite 2 Y position
+  STA $0224             ; sprite 9 Y position
   
   LDA #$A0              ; cake tile
-  STA $0209             ; sprite 2 tile
+  STA $0225             ; sprite 9 tile
   
   LDA #$02              ; attributes (palette 2)
-  STA $020A             ; sprite 2 attributes
+  STA $0226             ; sprite 9 attributes
   
   LDA cakex
-  STA $020B             ; sprite 2 X position
+  STA $0227             ; sprite 9 X position
   JMP UpdateSpritesDone
 
 HideCakeSprite:
   LDA #$FF              ; move sprite off screen
-  STA $0208
-  STA $0209
-  STA $020A  
-  STA $020B
+  STA $0224
+  STA $0225
+  STA $0226  
+  STA $0227
 
 UpdateSpritesDone:
   RTS
@@ -1407,7 +1564,7 @@ DrawWinMessage:
   STA $2007
   LDA #$1C              ; 'S' (tile $1C)
   STA $2007
-  LDA #$0A              ; '!' (tile $0A)
+  LDA #$2B              ; '!' (tile $0A)
   STA $2007
   JMP DrawRestartMessage
 
@@ -1705,7 +1862,7 @@ ReadController2Loop:
   .org $E000
 palette:
   .db $22,$29,$1A,$0F,  $22,$36,$17,$0F,  $22,$30,$21,$0F,  $22,$27,$17,$0F   ;;background palette
-  .db $22,$1C,$15,$14,  $22,$02,$38,$3C,  $22,$1C,$15,$14,  $22,$02,$38,$3C   ;;sprite palette
+  .db $21,$30,$26,$16,  $21,$0D,$26,$30,  $21,$1C,$15,$14,  $21,$02,$38,$3C   ;;sprite palette
 
 sprites:
      ;vert tile attr horiz
