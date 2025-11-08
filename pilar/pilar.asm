@@ -64,10 +64,12 @@ speed_level   .rs 1  ; current speed level (0-3)
 total_score   .rs 1  ; combined score of both players for speed calculation
 ; win condition system
 winner        .rs 1  ; 0 = no winner, 1 = player 1 wins, 2 = player 2 wins
-p1_anim_frame .rs 1  ; Player 1 animation frame (0 or 1)
+p1_anim_frame .rs 1  ; Player 1 animation frame (0, 1, or 2)
 p1_anim_timer .rs 1  ; Player 1 animation timer
-p2_anim_frame .rs 1  ; Player 2 animation frame (0 or 1)  
+p1_facing     .rs 1  ; Player 1 facing direction (0=right, 1=left)
+p2_anim_frame .rs 1  ; Player 2 animation frame (0, 1, or 2)  
 p2_anim_timer .rs 1  ; Player 2 animation timer
+p2_facing     .rs 1  ; Player 2 facing direction (0=right, 1=left)
 
 
 ;; DECLARE SOME CONSTANTS HERE
@@ -92,6 +94,7 @@ JUMP_DURATION  = $15  ; frames to jump upward (48 frames)
 FALL_SPEED     = $02  ; pixels per frame when falling down
 GROUND_Y       = $D0  ; Y position of ground (higher level)
 ANIM_SPEED     = $08  ; frames per animation frame (slower = higher number)
+IDLE_FRAME     = $FF  ; special value to indicate idle state
 
 ;;;;;;;;;;;;;;;;;;
 
@@ -306,8 +309,10 @@ InitializeGame:
   STA winner           ; no winner at start
   STA p1_anim_frame    ; start Player 1 animation at frame 0
   STA p1_anim_timer    ; start Player 1 animation timer at 0
+  STA p1_facing        ; start Player 1 facing right (0)
   STA p2_anim_frame    ; start Player 2 animation at frame 0
   STA p2_anim_timer    ; start Player 2 animation timer at 0
+  STA p2_facing        ; start Player 2 facing right (0)
 
 ;;;Set initial score values
   LDA #$00
@@ -686,11 +691,23 @@ SkipMovement:
 
 UpdatePlayerAnimation:
   ; Update Player 1 animation
-  ; Check if Player 1 is moving horizontally
+  ; Check if Player 1 is moving horizontally and update facing direction
   LDA buttons1
-  AND #%00000011        ; check left and right buttons
+  AND #%00000001        ; check right button
+  BEQ CheckP1Left
+  ; Moving right
+  LDA #$01
+  STA p1_facing         ; 1 = facing right
+  JMP P1IsMoving
+CheckP1Left:
+  LDA buttons1
+  AND #%00000010        ; check left button
   BEQ Player1NotMoving  ; if no horizontal movement, reset animation
+  ; Moving left
+  LDA #$00
+  STA p1_facing         ; 0 = facing left
   
+P1IsMoving:
   ; Player 1 is moving - update animation timer
   INC p1_anim_timer
   LDA p1_anim_timer
@@ -701,23 +718,41 @@ UpdatePlayerAnimation:
   LDA #$00
   STA p1_anim_timer     ; reset timer
   LDA p1_anim_frame
-  EOR #$01              ; flip between 0 and 1
+  CLC
+  ADC #$01              ; increment frame
+  CMP #$03              ; check if we've reached frame 3
+  BCC StoreP1Frame      ; if frame < 3, store it
+  LDA #$00              ; else reset to frame 0
+StoreP1Frame:
   STA p1_anim_frame
   JMP UpdatePlayer2Anim
 
 Player1NotMoving:
-  ; Reset Player 1 animation to frame 0 when not moving
-  LDA #$00
+  ; Set Player 1 to idle frame when not moving
+  LDA #IDLE_FRAME
   STA p1_anim_frame
+  LDA #$00
   STA p1_anim_timer
 
 UpdatePlayer2Anim:
   ; Update Player 2 animation
-  ; Check if Player 2 is moving horizontally
+  ; Check if Player 2 is moving horizontally and update facing direction
   LDA buttons2
-  AND #%00000011        ; check left and right buttons
+  AND #%00000001        ; check right button
+  BEQ CheckP2Left
+  ; Moving right
+  LDA #$01
+  STA p2_facing         ; 1 = facing right
+  JMP P2IsMoving
+CheckP2Left:
+  LDA buttons2
+  AND #%00000010        ; check left button
   BEQ Player2NotMoving  ; if no horizontal movement, reset animation
+  ; Moving left
+  LDA #$00
+  STA p2_facing         ; 0 = facing left
   
+P2IsMoving:
   ; Player 2 is moving - update animation timer
   INC p2_anim_timer
   LDA p2_anim_timer
@@ -728,14 +763,20 @@ UpdatePlayer2Anim:
   LDA #$00
   STA p2_anim_timer     ; reset timer
   LDA p2_anim_frame
-  EOR #$01              ; flip between 0 and 1
+  CLC
+  ADC #$01              ; increment frame
+  CMP #$03              ; check if we've reached frame 3
+  BCC StoreP2Frame      ; if frame < 3, store it
+  LDA #$00              ; else reset to frame 0
+StoreP2Frame:
   STA p2_anim_frame
   JMP UpdateAnimationDone
 
 Player2NotMoving:
-  ; Reset Player 2 animation to frame 0 when not moving
-  LDA #$00
+  ; Set Player 2 to idle frame when not moving
+  LDA #IDLE_FRAME
   STA p2_anim_frame
+  LDA #$00
   STA p2_anim_timer
 
 UpdateAnimationDone:
@@ -1267,47 +1308,157 @@ UpdatePlayer1Sprites:
   STA $0208             ; sprite 2 Y position
   STA $020C             ; sprite 3 Y position
   
-  ; Set X positions for all sprites
-  LDA ballx
-  STA $0203             ; sprite 0 X position
-  STA $020B             ; sprite 2 X position
-  CLC
-  ADC #$08              ; X position + 8 pixels for right sprites
-  STA $0207             ; sprite 1 X position
-  STA $020F             ; sprite 3 X position
+  ; Set attributes and positions based on facing direction
+  LDA p1_facing
+  BEQ P1FacingLeft
   
-  ; Set attributes (all use palette 0)
-  LDA #$00
+P1FacingRight:
+  ; Facing right - no flip, normal positioning  
+  LDA #%00000000        ; palette 0, no flip
   STA $0202             ; sprite 0 attributes
   STA $0206             ; sprite 1 attributes
   STA $020A             ; sprite 2 attributes
   STA $020E             ; sprite 3 attributes
   
-  ; Set tiles based on animation frame
-  LDA p1_anim_frame
-  BEQ Player1StandingTiles
+  ; Normal X positions (left sprite, then right sprite)
+  LDA ballx
+  STA $0203             ; sprite 0 X position (left)
+  STA $020B             ; sprite 2 X position (left)
+  CLC
+  ADC #$08              ; X position + 8 pixels for right sprites
+  STA $0207             ; sprite 1 X position (right)
+  STA $020F             ; sprite 3 X position (right)
+  JMP P1PositionsDone
   
-Player1WalkingTiles:
-  ; Walking animation tiles
-  LDA #$08              ; tile 08 (top-left walking)
-  STA $0201
-  LDA #$09              ; tile 09 (top-right walking)
-  STA $0205
-  LDA #$18              ; tile 18 (bottom-left walking)
+P1FacingLeft:
+  ; Facing left - flip horizontally and swap positions
+  LDA #%01000000        ; palette 0 + horizontal flip
+  STA $0202             ; sprite 0 attributes
+  STA $0206             ; sprite 1 attributes
+  STA $020A             ; sprite 2 attributes
+  STA $020E             ; sprite 3 attributes
+  
+  ; Swapped X positions (what was right is now left due to flip)
+  LDA ballx
+  CLC
+  ADC #$08              ; X position + 8 pixels
+  STA $0203             ; sprite 0 X position (was left, now right)
+  STA $020B             ; sprite 2 X position (was left, now right)
+  LDA ballx
+  STA $0207             ; sprite 1 X position (was right, now left)
+  STA $020F             ; sprite 3 X position (was right, now left)
+  
+P1PositionsDone:
+  
+  ; Check if player is jumping first
+  LDA on_ground
+  BEQ JumpToPlayer1JumpingTiles  ; if not on ground, use jumping tiles
+  
+  ; Set tiles based on animation frame (0, 1, 2, or IDLE)
+  LDA p1_anim_frame
+  CMP #IDLE_FRAME
+  BEQ Player1IdleTiles
+  
+  ; Walking animation frames (0, 1, or 2)
+  ; Base tiles: $20,$21,$30,$31 + (frame * 2)
+  ASL A                 ; multiply by 2 (frame * 2)
+  TAX                   ; use as offset
+  
+  ; Calculate the four tile values
+  LDA #$20
+  CLC
+  ADC p1_anim_frame
+  ADC p1_anim_frame     ; top-left tile
+  TAY                   ; store in Y
+  
+  LDA #$21
+  CLC
+  ADC p1_anim_frame
+  ADC p1_anim_frame     ; top-right tile
+  TAX                   ; store in X
+  
+  ; Check facing direction to assign tiles correctly
+  LDA p1_facing
+  BEQ P1WalkingLeft
+  
+P1WalkingRight:
+  ; Normal assignment (not flipped)
+  STY $0201             ; top-left
+  STX $0205             ; top-right
+  
+  LDA #$30
+  CLC
+  ADC p1_anim_frame
+  ADC p1_anim_frame     ; bottom-left tile
   STA $0209
-  LDA #$19              ; tile 19 (bottom-right walking)
+  
+  LDA #$31
+  CLC
+  ADC p1_anim_frame
+  ADC p1_anim_frame     ; bottom-right tile
   STA $020D
   RTS
   
-Player1StandingTiles:
-  ; Standing animation tiles
-  LDA #$04              ; tile 04 (top-left standing)
+P1WalkingLeft:
+  ; Swapped assignment (flipped sprites) - swap both positions AND tile numbers
+  ; When flipped: left tile becomes right tile, right tile becomes left tile
+  STY $0201             ; top-left tile (20) goes to sprite 0 (left position, but will be flipped to look right)
+  STX $0205             ; top-right tile (21) goes to sprite 1 (right position, but will be flipped to look left)
+  
+  LDA #$30
+  CLC
+  ADC p1_anim_frame
+  ADC p1_anim_frame     ; bottom-left tile
+  STA $0209             ; goes to sprite 2 (left position, but will be flipped to look right)
+  
+  LDA #$31
+  CLC
+  ADC p1_anim_frame
+  ADC p1_anim_frame     ; bottom-right tile
+  STA $020D             ; goes to sprite 3 (right position, but will be flipped to look left)
+  RTS
+
+JumpToPlayer1JumpingTiles:
+  JMP Player1JumpingTiles
+
+Player1IdleTiles:
+  ; Idle animation tiles (standing still) - original standing tiles
+  LDA p1_facing
+  BEQ P1IdleLeft
+  
+P1IdleRight:
+  ; Normal assignment (not flipped)
+  LDA #$04              ; idle top-left
   STA $0201
-  LDA #$05              ; tile 05 (top-right standing)
+  LDA #$05              ; idle top-right
   STA $0205
-  LDA #$14              ; tile 14 (bottom-left standing)
+  LDA #$14              ; idle bottom-left
   STA $0209
-  LDA #$15              ; tile 15 (bottom-right standing)
+  LDA #$15              ; idle bottom-right
+  STA $020D
+  RTS
+  
+P1IdleLeft:
+  ; Swapped assignment (flipped sprites) - keep original tile numbers but swap positions
+  LDA #$04              ; idle top-left tile goes to sprite 0 (left position, flipped to look right)
+  STA $0201
+  LDA #$05              ; idle top-right tile goes to sprite 1 (right position, flipped to look left)
+  STA $0205
+  LDA #$14              ; idle bottom-left tile goes to sprite 2 (left position, flipped to look right)
+  STA $0209
+  LDA #$15              ; idle bottom-right tile goes to sprite 3 (right position, flipped to look left)
+  STA $020D
+  RTS
+
+Player1JumpingTiles:
+  ; Jumping animation tiles (no flipping needed)
+  LDA #$26              ; jump top-left
+  STA $0201
+  LDA #$27              ; jump top-right
+  STA $0205
+  LDA #$36              ; jump bottom-left
+  STA $0209
+  LDA #$37              ; jump bottom-right
   STA $020D
   RTS
 
@@ -1322,47 +1473,157 @@ UpdatePlayer2Sprites:
   STA $0218             ; sprite 6 Y position
   STA $021C             ; sprite 7 Y position
   
-  ; Set X positions for all sprites
-  LDA ball2x
-  STA $0213             ; sprite 4 X position
-  STA $021B             ; sprite 6 X position
-  CLC
-  ADC #$08              ; X position + 8 pixels for right sprites
-  STA $0217             ; sprite 5 X position
-  STA $021F             ; sprite 7 X position
+  ; Set attributes and positions based on facing direction
+  LDA p2_facing
+  BEQ P2FacingLeft
   
-  ; Set attributes (all use palette 1)
-  LDA #$01
+P2FacingRight:
+  ; Facing right - no flip, normal positioning
+  LDA #%00000001        ; palette 1, no flip
   STA $0212             ; sprite 4 attributes
   STA $0216             ; sprite 5 attributes
   STA $021A             ; sprite 6 attributes
   STA $021E             ; sprite 7 attributes
   
-  ; Set tiles based on animation frame
-  LDA p2_anim_frame
-  BEQ Player2StandingTiles
+  ; Normal X positions (left sprite, then right sprite)
+  LDA ball2x
+  STA $0213             ; sprite 4 X position (left)
+  STA $021B             ; sprite 6 X position (left)
+  CLC
+  ADC #$08              ; X position + 8 pixels for right sprites
+  STA $0217             ; sprite 5 X position (right)
+  STA $021F             ; sprite 7 X position (right)
+  JMP P2PositionsDone
   
-Player2WalkingTiles:
-  ; Walking animation tiles
-  LDA #$0A              ; tile 0A (top-left walking)
-  STA $0211
-  LDA #$0B              ; tile 0B (top-right walking)
-  STA $0215
-  LDA #$1A              ; tile 1A (bottom-left walking)
+P2FacingLeft:
+  ; Facing left - flip horizontally and swap positions
+  LDA #%01000001        ; palette 1 + horizontal flip
+  STA $0212             ; sprite 4 attributes
+  STA $0216             ; sprite 5 attributes
+  STA $021A             ; sprite 6 attributes
+  STA $021E             ; sprite 7 attributes
+  
+  ; Swapped X positions (what was right is now left due to flip)
+  LDA ball2x
+  CLC
+  ADC #$08              ; X position + 8 pixels
+  STA $0213             ; sprite 4 X position (was left, now right)
+  STA $021B             ; sprite 6 X position (was left, now right)
+  LDA ball2x
+  STA $0217             ; sprite 5 X position (was right, now left)
+  STA $021F             ; sprite 7 X position (was right, now left)
+  
+P2PositionsDone:
+  
+  ; Check if player is jumping first
+  LDA on_ground2
+  BEQ JumpToPlayer2JumpingTiles  ; if not on ground, use jumping tiles
+  
+  ; Set tiles based on animation frame (0, 1, 2, or IDLE)
+  LDA p2_anim_frame
+  CMP #IDLE_FRAME
+  BEQ Player2IdleTiles
+  
+  ; Walking animation frames (0, 1, or 2)
+  ; Base tiles: $40,$41,$50,$51 + (frame * 2)
+  ASL A                 ; multiply by 2 (frame * 2)
+  TAX                   ; use as offset
+  
+  ; Calculate the four tile values
+  LDA #$40
+  CLC
+  ADC p2_anim_frame
+  ADC p2_anim_frame     ; top-left tile
+  TAY                   ; store in Y
+  
+  LDA #$41
+  CLC
+  ADC p2_anim_frame
+  ADC p2_anim_frame     ; top-right tile
+  TAX                   ; store in X
+  
+  ; Check facing direction to assign tiles correctly
+  LDA p2_facing
+  BEQ P2WalkingLeft
+  
+P2WalkingRight:
+  ; Normal assignment (not flipped)
+  STY $0211             ; top-left
+  STX $0215             ; top-right
+  
+  LDA #$50
+  CLC
+  ADC p2_anim_frame
+  ADC p2_anim_frame     ; bottom-left tile
   STA $0219
-  LDA #$1B              ; tile 1B (bottom-right walking)
+  
+  LDA #$51
+  CLC
+  ADC p2_anim_frame
+  ADC p2_anim_frame     ; bottom-right tile
   STA $021D
   RTS
   
-Player2StandingTiles:
-  ; Standing animation tiles
-  LDA #$06              ; tile 06 (top-left standing)
+P2WalkingLeft:
+  ; Swapped assignment (flipped sprites) - swap both positions AND tile numbers
+  ; When flipped: left tile becomes right tile, right tile becomes left tile
+  STY $0211             ; top-left tile (40) goes to sprite 4 (left position, but will be flipped to look right)
+  STX $0215             ; top-right tile (41) goes to sprite 5 (right position, but will be flipped to look left)
+  
+  LDA #$50
+  CLC
+  ADC p2_anim_frame
+  ADC p2_anim_frame     ; bottom-left tile
+  STA $0219             ; goes to sprite 6 (left position, but will be flipped to look right)
+  
+  LDA #$51
+  CLC
+  ADC p2_anim_frame
+  ADC p2_anim_frame     ; bottom-right tile
+  STA $021D             ; goes to sprite 7 (right position, but will be flipped to look left)
+  RTS
+
+JumpToPlayer2JumpingTiles:
+  JMP Player2JumpingTiles
+
+Player2IdleTiles:
+  ; Idle animation tiles (standing still) - original standing tiles
+  LDA p2_facing
+  BEQ P2IdleLeft
+  
+P2IdleRight:
+  ; Normal assignment (not flipped)
+  LDA #$06              ; idle top-left
   STA $0211
-  LDA #$07              ; tile 07 (top-right standing)
+  LDA #$07              ; idle top-right
   STA $0215
-  LDA #$16              ; tile 16 (bottom-left standing)
+  LDA #$16              ; idle bottom-left
   STA $0219
-  LDA #$17              ; tile 17 (bottom-right standing)
+  LDA #$17              ; idle bottom-right
+  STA $021D
+  RTS
+  
+P2IdleLeft:
+  ; Swapped assignment (flipped sprites) - keep original tile numbers but swap positions
+  LDA #$06              ; idle top-left tile goes to sprite 4 (left position, flipped to look right)
+  STA $0211
+  LDA #$07              ; idle top-right tile goes to sprite 5 (right position, flipped to look left)
+  STA $0215
+  LDA #$16              ; idle bottom-left tile goes to sprite 6 (left position, flipped to look right)
+  STA $0219
+  LDA #$17              ; idle bottom-right tile goes to sprite 7 (right position, flipped to look left)
+  STA $021D
+  RTS
+
+Player2JumpingTiles:
+  ; Jumping animation tiles (no flipping needed)
+  LDA #$46              ; jump top-left
+  STA $0211
+  LDA #$47              ; jump top-right
+  STA $0215
+  LDA #$56              ; jump bottom-left
+  STA $0219
+  LDA #$57              ; jump bottom-right
   STA $021D
   RTS
  
@@ -1389,7 +1650,7 @@ UpdateSprites:
   CMP #$01
   BEQ SetBadItemTileLeft    ; if itemtype = 1, use tile 2 (broken heart)
   ; itemtype = 2, cake
-  LDA #$A0              ; cake uses tile $A0
+  LDA #$00              ; cake uses tile $00
   JMP SetItemTileLeft
 SetBadItemTileLeft:
   LDA #$02              ; bad item uses tile 2 (broken heart)
@@ -1427,7 +1688,7 @@ UpdateRightZoneItemSprite:
   CMP #$01
   BEQ SetBadItemTileRight    ; if itemtype = 1, use tile 2 (broken heart)
   ; itemtype = 2, cake
-  LDA #$A0              ; cake uses tile $A0
+  LDA #$00              ; cake uses tile $00
   JMP SetItemTileRight
 SetBadItemTileRight:
   LDA #$02              ; bad item uses tile 2 (broken heart)
@@ -1459,7 +1720,7 @@ UpdateCakeSprite:
   LDA #GROUND_Y         ; cake Y position at floor level
   STA $0224             ; sprite 9 Y position
   
-  LDA #$A0              ; cake tile
+  LDA #$00              ; cake tile
   STA $0225             ; sprite 9 tile
   
   LDA #$02              ; attributes (palette 2)
