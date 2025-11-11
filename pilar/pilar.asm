@@ -1,5 +1,5 @@
   .inesprg 1   ; 1x 16KB PRG code
-  .ineschr 1   ; 1x  8KB CHR data
+  .ineschr 2   ; 2x  8KB CHR data (for title and gameplay graphics)
   .inesmap 0   ; mapper 0 = NROM, no bank swapping
   .inesmir 1   ; background mirroring
   
@@ -70,6 +70,9 @@ p1_facing     .rs 1  ; Player 1 facing direction (0=right, 1=left)
 p2_anim_frame .rs 1  ; Player 2 animation frame (0, 1, or 2)  
 p2_anim_timer .rs 1  ; Player 2 animation timer
 p2_facing     .rs 1  ; Player 2 facing direction (0=right, 1=left)
+; pointer variables for background loading
+pointerLo     .rs 1  ; pointer low byte
+pointerHi     .rs 1  ; pointer high byte
 
 
 ;; DECLARE SOME CONSTANTS HERE
@@ -137,8 +140,12 @@ vblankwait2:      ; Second wait for vblank, PPU is ready after this
   BIT $2002
   BPL vblankwait2
 
+  ; Load title screen CHR bank (bank 0)
+  LDA #$00          ; put bank 0 (title CHR) into A
+  JSR Bankswitch    ; switch to title screen graphics
+
   JSR LoadPalettes
-  JSR LoadBackground
+  JSR LoadTitleScreen  ; load title screen nametable
   JMP InitializeGame
 
 LoadPalettes:
@@ -327,7 +334,7 @@ InitializeGame:
 
 
 ;;:Set starting game state
-  LDA #STATEPLAYING
+  LDA #STATETITLE
   STA gamestate
 
 
@@ -394,12 +401,37 @@ GameEngineDone:
 ;;;;;;;;
  
 EngineTitle:
-  ;;if start button pressed
-  ;;  turn screen off
-  ;;  load game screen
-  ;;  set starting paddle/ball position
-  ;;  go to Playing State
-  ;;  turn screen on
+  ; Check for START button press on controller 1 or 2
+  LDA buttons1
+  AND #%00010000      ; START button
+  BNE StartGameFromTitle
+  
+  LDA buttons2  
+  AND #%00010000      ; START button
+  BNE StartGameFromTitle
+  
+  JMP GameEngineDone
+
+StartGameFromTitle:
+  ; Turn screen off
+  LDA #%00000000
+  STA $2001
+  
+  ; Switch to gameplay CHR bank (bank 1)
+  LDA #$01          ; put bank 1 (gameplay CHR) into A
+  JSR Bankswitch    ; switch to gameplay graphics
+  
+  ; Load game background
+  JSR LoadBackground
+  
+  ; Set game state to playing
+  LDA #STATEPLAYING
+  STA gamestate
+  
+  ; Turn screen back on
+  LDA #%00011110
+  STA $2001
+  
   JMP GameEngineDone
 
 ;;;;;;;;; 
@@ -2111,12 +2143,53 @@ ReadController2Loop:
   DEX
   BNE ReadController2Loop
   RTS  
+
+Bankswitch:
+  TAX              ; copy A into X
+  STA Bankvalues, X ; new bank to use
+  RTS
+
+Bankvalues:
+  .db $00, $01, $02, $03 ; bank numbers
+
+LoadTitleScreen:
+  ; Load title screen nametable from pilartitle.nam
+  LDA $2002             ; read PPU status to reset the high/low latch
+  LDA #$20
+  STA $2006             ; write the high byte of $2000 address
+  LDA #$00
+  STA $2006             ; write the low byte of $2000 address
+
+  LDA #LOW(titleScreen)
+  STA pointerLo         ; put the low byte of the address into pointer
+  LDA #HIGH(titleScreen)
+  STA pointerHi         ; put the high byte of the address into pointer
+
+  LDX #$00              ; start at pointer + 0
+  LDY #$00
+TitleOutsideLoop:
+TitleInsideLoop:
+  LDA [pointerLo], y    ; copy one background byte from address in pointer plus Y
+  STA $2007             ; this runs 256 * 4 times
+
+  INY                   ; inside loop counter
+  CPY #$00
+  BNE TitleInsideLoop   ; run the inside loop 256 times before continuing down
+
+  INC pointerHi         ; low byte went 0 to 256, so high byte needs to be changed now
+
+  INX
+  CPX #$04
+  BNE TitleOutsideLoop  ; run the outside loop 4 times before continuing down
+  RTS
   
   
     
         
 ;;;;;;;;;;;;;;  
   
+titleScreen:
+  .incbin "pilartitle.nam"
   
   
   .bank 1
@@ -2147,4 +2220,8 @@ sprites:
   
   .bank 2
   .org $0000
-  .incbin "pilar.chr"   ;includes 8KB graphics file from SMB1
+  .incbin "pilartitle.chr"   ; title screen graphics (8KB CHR bank 0)
+
+  .bank 3
+  .org $0000
+  .incbin "pilar.chr"        ; gameplay graphics (8KB CHR bank 1)
