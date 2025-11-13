@@ -78,6 +78,15 @@ menu_selection .rs 1  ; 0 = start, 1 = secretos
 menu_cursor_y  .rs 1  ; Y position of cursor sprite
 menu_cursor_x  .rs 1  ; X position of cursor sprite
 input_timer    .rs 1  ; timer to prevent immediate button triggers (counts down from 120)
+; secretos screen variables
+secret_digit1  .rs 1  ; first digit (0-9)
+secret_digit2  .rs 1  ; second digit (0-9)
+secret_digit3  .rs 1  ; third digit (0-9)
+secret_digit4  .rs 1  ; fourth digit (0-9)
+secret_cursor  .rs 1  ; which digit is selected (0-3)
+secret_message .rs 1  ; 0=no message, 1=error, 2=success
+secret_input_delay .rs 1  ; delay timer for button inputs (30 frames)
+secret_draw_flag .rs 1  ; 1=need to redraw UI during next NMI, 0=no draw needed
 
 
 ;; DECLARE SOME CONSTANTS HERE
@@ -393,6 +402,14 @@ NMI:
   STA $4014       ; set the high byte (02) of the RAM address, start the transfer
 
   JSR DrawScore
+  
+  ; Check if we need to draw secretos UI
+  LDA secret_draw_flag
+  BEQ SkipSecretDraw
+  JSR DrawSecretosUI
+  LDA #$00
+  STA secret_draw_flag  ; clear flag after drawing
+SkipSecretDraw:
 
   ;;This is the PPU clean up section, so rendering the next frame starts properly.
   LDA #%10010000   ; enable NMI, sprites from Pattern Table 0, background from Pattern Table 1
@@ -524,15 +541,29 @@ WaitVBlankSecretos:
   BIT $2002
   BPL WaitVBlankSecretos
   
-  ; Load black screen with tile 0 in center
+  ; Load black screen
   JSR LoadSecretosScreen
+  
+  ; Initialize secretos variables
+  LDA #$00
+  STA secret_digit1
+  STA secret_digit2
+  STA secret_digit3
+  STA secret_digit4
+  STA secret_cursor     ; start at first digit
+  STA secret_message    ; no message initially
+  STA secret_input_delay ; no input delay initially
+  STA secret_draw_flag  ; no draw flag initially
+  
+  ; Draw the secretos UI (safe to do here, screen is off)
+  JSR DrawSecretosUI
   
   ; Set game state to secretos
   LDA #STATESECRETOS
   STA gamestate
   
   ; Set input timer to 120 frames (2 seconds at 60fps)
-  LDA #120
+  LDA #60
   STA input_timer
   
   ; Turn screen back on
@@ -587,11 +618,85 @@ EngineSecretos:
   JMP GameEngineDone        ; skip button checks while timer is active
 
 SecretosCheckButtons:
-  ; Check for START or A button to return to title screen
+  ; Decrement input delay timer if active
+  LDA secret_input_delay
+  BEQ CheckSecretInputs
+  DEC secret_input_delay
+  JMP SecretosDone
+
+CheckSecretInputs:
+  ; Check for B button to return to title screen (no delay)
   LDA buttons1
-  AND #%10010000      ; A button or START button
-  BEQ SecretosDone    ; not pressed, stay on secretos screen
-  
+  AND #%01000000      ; B button
+  BEQ CheckSecretUp   ; not pressed, check other buttons
+  JMP ReturnToTitleFromSecretos
+
+CheckSecretUp:
+  ; Check for UP button to increment current digit
+  LDA buttons1
+  AND #%00001000      ; UP button
+  BEQ CheckSecretDown
+  JSR IncrementSecretDigit
+  LDA #$01                ; set flag to redraw during NMI
+  STA secret_draw_flag
+  LDA #10                 ; set input delay
+  STA secret_input_delay
+  JMP SecretosDone
+
+CheckSecretDown:
+  ; Check for DOWN button to decrement current digit
+  LDA buttons1
+  AND #%00000100      ; DOWN button
+  BEQ CheckSecretLeft
+  JSR DecrementSecretDigit
+  LDA #$01                ; set flag to redraw during NMI
+  STA secret_draw_flag
+  LDA #10                 ; set input delay
+  STA secret_input_delay
+  JMP SecretosDone
+
+CheckSecretLeft:
+  ; Check for LEFT button to move cursor left
+  LDA buttons1
+  AND #%00000010      ; LEFT button
+  BEQ CheckSecretRight
+  LDA secret_cursor
+  BEQ CheckSecretRight  ; already at leftmost
+  DEC secret_cursor
+  LDA #$01                ; set flag to redraw during NMI
+  STA secret_draw_flag
+  LDA #10                 ; set input delay
+  STA secret_input_delay
+  JMP SecretosDone
+
+CheckSecretRight:
+  ; Check for RIGHT button to move cursor right
+  LDA buttons1
+  AND #%00000001      ; RIGHT button
+  BEQ CheckSecretA
+  LDA secret_cursor
+  CMP #$03
+  BEQ CheckSecretA      ; already at rightmost
+  INC secret_cursor
+  LDA #$01                ; set flag to redraw during NMI
+  STA secret_draw_flag
+  LDA #10                 ; set input delay
+  STA secret_input_delay
+  JMP SecretosDone
+
+CheckSecretA:
+  ; Check for A button to check the code
+  LDA buttons1
+  AND #%10000000      ; A button
+  BEQ SecretosDone
+  JSR CheckSecretCode
+  LDA #$01                ; set flag to redraw during NMI
+  STA secret_draw_flag
+  LDA #10                 ; set input delay
+  STA secret_input_delay
+  JMP SecretosDone
+
+ReturnToTitleFromSecretos:
   ; Return to title screen
   LDA #%00000000
   STA $2001
@@ -620,7 +725,7 @@ WaitVBlankReturnToTitle:
   STA menu_cursor_x
   
   ; Set input timer to 120 frames (2 seconds) to prevent immediate re-entry
-  LDA #120
+  LDA #60
   STA input_timer
   
   ; Set state back to title
@@ -632,6 +737,7 @@ WaitVBlankReturnToTitle:
   STA $2000
   LDA #%00011110
   STA $2001
+  JMP GameEngineDone
 
 SecretosDone:
   JMP GameEngineDone
@@ -2504,7 +2610,7 @@ TitleInsideLoop:
   RTS
 
 LoadSecretosScreen:
-  ; Fill entire screen with black (tile $00)
+  ; Fill entire screen with spaces (tile $24)
   LDA $2002             ; read PPU status to reset the high/low latch
   LDA #$20
   STA $2006             ; write the high byte of $2000 address
@@ -2515,7 +2621,7 @@ LoadSecretosScreen:
   LDY #$00              ; inner loop counter (256 bytes per page)
 SecretosOutsideLoop:
 SecretosInsideLoop:
-  LDA #$00              ; tile 0 (black)
+  LDA #$24              ; tile $24 (space/blank)
   STA $2007             ; write to PPU
   INY                   ; increment inner counter
   CPY #$00
@@ -2525,16 +2631,271 @@ SecretosInsideLoop:
   CPX #$04
   BNE SecretosOutsideLoop ; run 4 times (4 * 256 = 1024 tiles)
   
-  ; Now draw a single tile 0 in the center of the screen
-  ; Center is at row 15, column 16 (approximately middle)
-  ; PPU address = $2000 + (15 * 32) + 16 = $2000 + $1E0 + $10 = $21F0
+  ; Set all attributes to palette 0
+  ; Attribute table starts at $23C0 and is 64 bytes (8x8 grid)
+  LDA $2002             ; reset PPU latch
+  LDA #$23
+  STA $2006             ; high byte of $23C0
+  LDA #$C0
+  STA $2006             ; low byte of $23C0
+  
+  LDX #$00              ; counter for 64 bytes
+SecretosAttributeLoop:
+  LDA #%00000000        ; all tiles use palette 0 (bits: 00 00 00 00)
+  STA $2007
+  INX
+  CPX #$40              ; 64 bytes ($40 in hex)
+  BNE SecretosAttributeLoop
+  
+  RTS
+
+DrawSecretosUI:
+  ; Draw the 4-digit number selector and messages
+  ; Position: center of screen, row 14
+  ; PPU address = $2000 + (14 * 32) + 12 = $2000 + $1C0 + $0C = $21CC
+  
   LDA $2002             ; reset PPU latch
   LDA #$21
   STA $2006             ; high byte
-  LDA #$F0
-  STA $2006             ; low byte
-  LDA #$00              ; tile 0
-  STA $2007             ; draw tile 0 in center
+  LDA #$CC
+  STA $2006             ; low byte ($21CC = row 14, col 12)
+  
+  ; Draw first digit
+  LDA secret_digit1
+  STA $2007
+  
+  ; Space
+  LDA #$24
+  STA $2007
+  
+  ; Draw second digit
+  LDA secret_digit2
+  STA $2007
+  
+  ; Space
+  LDA #$24
+  STA $2007
+  
+  ; Draw third digit
+  LDA secret_digit3
+  STA $2007
+  
+  ; Space
+  LDA #$24
+  STA $2007
+  
+  ; Draw fourth digit
+  LDA secret_digit4
+  STA $2007
+  
+  ; Draw cursor indicator (underscore) below selected digit
+  ; Row 15, starting at column 12
+  LDA $2002
+  LDA #$21
+  STA $2006
+  LDA #$EC              ; $21EC = row 15, col 12
+  STA $2006
+  
+  ; Draw underscores based on cursor position
+  LDX #$00
+DrawCursorLoop:
+  CPX secret_cursor
+  BEQ DrawCursorHere
+  LDA #$24              ; space
+  JMP DrawCursorTile
+DrawCursorHere:
+  LDA #$28              ; dash/underscore (tile $28 = "-")
+DrawCursorTile:
+  STA $2007
+  LDA #$24              ; space after each position
+  STA $2007
+  INX
+  CPX #$04
+  BNE DrawCursorLoop
+  
+  ; Draw message if any (row 17)
+  LDA secret_message
+  BEQ DrawSecretosUIDone  ; no message
+  
+  LDA $2002
+  LDA #$22
+  STA $2006
+  LDA #$2C              ; $222C = row 17, col 12
+  STA $2006
+  
+  LDA secret_message
+  CMP #$01
+  BEQ DrawErrorMessage
+  CMP #$02
+  BEQ DrawSuccessMessage
+  JMP DrawSecretosUIDone
+
+DrawErrorMessage:
+  ; "ERROR"
+  LDA #$0E              ; E
+  STA $2007
+  LDA #$1B              ; R
+  STA $2007
+  LDA #$1B              ; R
+  STA $2007
+  LDA #$18              ; O
+  STA $2007
+  LDA #$1B              ; R
+  STA $2007
+  JMP DrawSecretosUIDone
+
+DrawSuccessMessage:
+  ; "SECRETO SI"
+  LDA #$1C              ; S
+  STA $2007
+  LDA #$0E              ; E
+  STA $2007
+  LDA #$0C              ; C
+  STA $2007
+  LDA #$1B              ; R
+  STA $2007
+  LDA #$0E              ; E
+  STA $2007
+  LDA #$1D              ; T
+  STA $2007
+  LDA #$18              ; O
+  STA $2007
+  LDA #$24              ; space
+  STA $2007
+  LDA #$1C              ; S
+  STA $2007
+  LDA #$12              ; I
+  STA $2007
+
+DrawSecretosUIDone:
+  RTS
+
+IncrementSecretDigit:
+  ; Increment the current digit (0-9 wrap around)
+  LDX secret_cursor
+  CPX #$00
+  BEQ IncDigit1
+  CPX #$01
+  BEQ IncDigit2
+  CPX #$02
+  BEQ IncDigit3
+  ; else digit 4
+  LDA secret_digit4
+  CMP #$09
+  BEQ WrapDigit4To0
+  INC secret_digit4
+  RTS
+WrapDigit4To0:
+  LDA #$00
+  STA secret_digit4
+  RTS
+
+IncDigit1:
+  LDA secret_digit1
+  CMP #$09
+  BEQ WrapDigit1To0
+  INC secret_digit1
+  RTS
+WrapDigit1To0:
+  LDA #$00
+  STA secret_digit1
+  RTS
+
+IncDigit2:
+  LDA secret_digit2
+  CMP #$09
+  BEQ WrapDigit2To0
+  INC secret_digit2
+  RTS
+WrapDigit2To0:
+  LDA #$00
+  STA secret_digit2
+  RTS
+
+IncDigit3:
+  LDA secret_digit3
+  CMP #$09
+  BEQ WrapDigit3To0
+  INC secret_digit3
+  RTS
+WrapDigit3To0:
+  LDA #$00
+  STA secret_digit3
+  RTS
+
+DecrementSecretDigit:
+  ; Decrement the current digit (0-9 wrap around)
+  LDX secret_cursor
+  CPX #$00
+  BEQ DecDigit1
+  CPX #$01
+  BEQ DecDigit2
+  CPX #$02
+  BEQ DecDigit3
+  ; else digit 4
+  LDA secret_digit4
+  BEQ WrapDigit4To9
+  DEC secret_digit4
+  RTS
+WrapDigit4To9:
+  LDA #$09
+  STA secret_digit4
+  RTS
+
+DecDigit1:
+  LDA secret_digit1
+  BEQ WrapDigit1To9
+  DEC secret_digit1
+  RTS
+WrapDigit1To9:
+  LDA #$09
+  STA secret_digit1
+  RTS
+
+DecDigit2:
+  LDA secret_digit2
+  BEQ WrapDigit2To9
+  DEC secret_digit2
+  RTS
+WrapDigit2To9:
+  LDA #$09
+  STA secret_digit2
+  RTS
+
+DecDigit3:
+  LDA secret_digit3
+  BEQ WrapDigit3To9
+  DEC secret_digit3
+  RTS
+WrapDigit3To9:
+  LDA #$09
+  STA secret_digit3
+  RTS
+
+CheckSecretCode:
+  ; Check if the entered code matches any secrets
+  ; For now, just check for 1234 as an example
+  LDA secret_digit1
+  CMP #$01
+  BNE SecretCodeError
+  LDA secret_digit2
+  CMP #$02
+  BNE SecretCodeError
+  LDA secret_digit3
+  CMP #$03
+  BNE SecretCodeError
+  LDA secret_digit4
+  CMP #$04
+  BNE SecretCodeError
+  
+  ; Success!
+  LDA #$02
+  STA secret_message
+  RTS
+
+SecretCodeError:
+  LDA #$01
+  STA secret_message
   RTS
   
   
