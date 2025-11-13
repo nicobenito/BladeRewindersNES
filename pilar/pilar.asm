@@ -1,6 +1,6 @@
   .inesprg 1   ; 1x 16KB PRG code
   .ineschr 2   ; 2x  8KB CHR data (for title and gameplay graphics)
-  .inesmap 0   ; mapper 0 = NROM, no bank swapping
+  .inesmap 3   ; mapper 3 = CNROM, supports CHR-ROM bank switching
   .inesmir 1   ; background mirroring
   
 
@@ -144,9 +144,24 @@ vblankwait2:      ; Second wait for vblank, PPU is ready after this
   LDA #$00          ; put bank 0 (title CHR) into A
   JSR Bankswitch    ; switch to title screen graphics
 
-  JSR LoadPalettes
-  JSR LoadTitleScreen  ; load title screen nametable
+  JSR LoadTitlePalettes  ; load title screen palettes
+  JSR LoadTitleScreen    ; load title screen nametable
   JMP InitializeGame
+
+LoadTitlePalettes:
+  LDA $2002             ; read PPU status to reset the high/low latch
+  LDA #$3F
+  STA $2006             ; write the high byte of $3F00 address
+  LDA #$00
+  STA $2006             ; write the low byte of $3F00 address
+  LDX #$00              ; start out at 0
+LoadTitlePalettesLoop:
+  LDA titlepalette, x   ; load data from title palette
+  STA $2007             ; write to PPU
+  INX                   ; X = X + 1
+  CPX #$20              ; Compare X to hex $20, decimal 32 - copying 32 bytes
+  BNE LoadTitlePalettesLoop
+  RTS
 
 LoadPalettes:
   LDA $2002             ; read PPU status to reset the high/low latch
@@ -416,10 +431,20 @@ StartGameFromTitle:
   ; Turn screen off
   LDA #%00000000
   STA $2001
+  STA $2000             ; also turn off NMI
+  
+  ; Wait for vblank to ensure PPU is ready
+  LDA $2002             ; read PPU status to reset latch
+WaitVBlankTransition:
+  BIT $2002
+  BPL WaitVBlankTransition
   
   ; Switch to gameplay CHR bank (bank 1)
   LDA #$01          ; put bank 1 (gameplay CHR) into A
   JSR Bankswitch    ; switch to gameplay graphics
+  
+  ; Load gameplay palettes
+  JSR LoadPalettes
   
   ; Load game background
   JSR LoadBackground
@@ -429,7 +454,9 @@ StartGameFromTitle:
   STA gamestate
   
   ; Turn screen back on
-  LDA #%00011110
+  LDA #%10010000        ; enable NMI, sprites from Pattern Table 0, background from Pattern Table 1
+  STA $2000
+  LDA #%00011110        ; enable sprites, enable background, no clipping on left side
   STA $2001
   
   JMP GameEngineDone
@@ -1663,12 +1690,22 @@ Player2JumpingTiles:
 
 
 UpdateSprites:
+  ; Check if we're on title screen - if so, hide all sprites
+  LDA gamestate
+  CMP #STATETITLE
+  BEQ JumpToHideAllSprites
+  
   ; Update Player 1 (16x16 character using sprites 0-3)
   JSR UpdatePlayer1Sprites
   
   ; Update Player 2 (16x16 character using sprites 4-7)  
   JSR UpdatePlayer2Sprites
-  
+  JMP ContinueUpdateSprites
+
+JumpToHideAllSprites:
+  JMP HideAllSprites
+
+ContinueUpdateSprites:
   ; Update falling item sprite (sprite 8) - Left Zone
   LDA itemactive
   BEQ HideItemSprite    ; if item not active, hide sprite
@@ -1768,14 +1805,33 @@ HideCakeSprite:
   STA $0225
   STA $0226  
   STA $0227
+  JMP UpdateSpritesDone
+
+HideAllSprites:
+  ; Hide all sprites by moving them off screen
+  LDX #$00              ; start with sprite 0
+HideSpritesLoop:
+  LDA #$FF              ; Y position off screen
+  STA $0200, X          ; set Y position
+  INX
+  INX
+  INX
+  INX                   ; move to next sprite (4 bytes per sprite)
+  CPX #$28              ; check if we've done 10 sprites (0-9) = 40 bytes
+  BNE HideSpritesLoop
+  RTS
 
 UpdateSpritesDone:
   RTS
  
  
 DrawScore:
-  ; Check if we're in win screen state
+  ; Check if we're on title screen - if so, skip drawing score
   LDA gamestate
+  CMP #STATETITLE
+  BEQ SkipDrawScore
+  
+  ; Check if we're in win screen state
   CMP #STATEWINSCREEN
   BEQ DrawWinMessage
   
@@ -1827,6 +1883,7 @@ DrawScore:
   LDA heartCounter2  ; get Player 2 heart counter value
   STA $2007          ; draw heart counter to background
   
+SkipDrawScore:
   RTS
 
 DrawWinMessage:
@@ -2145,12 +2202,14 @@ ReadController2Loop:
   RTS  
 
 Bankswitch:
-  TAX              ; copy A into X
-  STA Bankvalues, X ; new bank to use
+  ; For CNROM (mapper 3), write to ROM address containing bank number
+  ; The value in A is the bank number to switch to
+  TAX               ; copy A into X
+  STA Bankvalues, X ; write to ROM location with bank value
   RTS
 
 Bankvalues:
-  .db $00, $01, $02, $03 ; bank numbers
+  .db $00, $01, $02, $03  ; bank numbers
 
 LoadTitleScreen:
   ; Load title screen nametable from pilartitle.nam
@@ -2194,6 +2253,10 @@ titleScreen:
   
   .bank 1
   .org $E000
+titlepalette:
+  .db $0F,$20,$10,$0F,  $0F,$21,$20,$31,  $0F,$15,$20,$26,  $0F,$00,$10,$30   ;;title background palette
+  .db $0F,$20,$10,$0F,  $0F,$21,$20,$31,  $0F,$15,$20,$26,  $0F,$00,$10,$30   ;;title sprite palette (same as bg)
+
 palette:
   .db $22,$29,$1A,$0F,  $22,$36,$17,$0F,  $22,$30,$21,$0F,  $22,$27,$17,$0F   ;;background palette
   .db $21,$30,$26,$16,  $21,$0D,$26,$30,  $21,$1C,$15,$14,  $21,$02,$38,$3C   ;;sprite palette
