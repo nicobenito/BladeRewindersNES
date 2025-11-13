@@ -73,6 +73,11 @@ p2_facing     .rs 1  ; Player 2 facing direction (0=right, 1=left)
 ; pointer variables for background loading
 pointerLo     .rs 1  ; pointer low byte
 pointerHi     .rs 1  ; pointer high byte
+; title screen menu variables
+menu_selection .rs 1  ; 0 = start, 1 = secretos
+menu_cursor_y  .rs 1  ; Y position of cursor sprite
+menu_cursor_x  .rs 1  ; X position of cursor sprite
+input_timer    .rs 1  ; timer to prevent immediate button triggers (counts down from 120)
 
 
 ;; DECLARE SOME CONSTANTS HERE
@@ -80,6 +85,7 @@ STATETITLE     = $00  ; displaying title screen
 STATEPLAYING   = $01  ; move paddles/ball, check for collisions
 STATEGAMEOVER  = $02  ; displaying game over screen
 STATEWINSCREEN = $03  ; displaying winner screen
+STATESECRETOS  = $04  ; displaying secretos screen
   
 RIGHTWALL      = $F4  ; when ball reaches one of these, do something
 TOPWALL        = $20
@@ -98,6 +104,12 @@ FALL_SPEED     = $02  ; pixels per frame when falling down
 GROUND_Y       = $D0  ; Y position of ground (higher level)
 ANIM_SPEED     = $08  ; frames per animation frame (slower = higher number)
 IDLE_FRAME     = $FF  ; special value to indicate idle state
+
+; Title screen menu constants
+MENU_START_Y   = $68  ; Y position for "start" option (13 * 8 = 104 = $68)
+MENU_START_X   = $58  ; X position for "start" cursor (11 * 8 = 88 = $58)
+MENU_SECRETOS_Y = $78 ; Y position for "secretos" option (15 * 8 = 120 = $78)
+MENU_SECRETOS_X = $50 ; X position for "secretos" cursor (10 * 8 = 80 = $50)
 
 ;;;;;;;;;;;;;;;;;;
 
@@ -351,6 +363,15 @@ InitializeGame:
 ;;:Set starting game state
   LDA #STATETITLE
   STA gamestate
+  
+;;:Initialize title screen menu
+  LDA #$00              ; start with "start" option selected
+  STA menu_selection
+  LDA #MENU_START_Y
+  STA menu_cursor_y
+  LDA #MENU_START_X
+  STA menu_cursor_x
+  STA input_timer       ; initialize timer to 0 (no delay on boot)
 
 
               
@@ -391,19 +412,28 @@ NMI:
 GameEngine:  
   LDA gamestate
   CMP #STATETITLE
-  BEQ EngineTitle    ;;game is displaying title screen
+  BNE CheckSecretos
+  JMP EngineTitle    ;;game is displaying title screen
+  
+CheckSecretos:
+  CMP #STATESECRETOS
+  BNE CheckGameOver
+  JMP EngineSecretos  ;;game is displaying secretos screen
     
-  LDA gamestate
+CheckGameOver:
   CMP #STATEGAMEOVER
-  BEQ EngineGameOver  ;;game is displaying ending screen
+  BNE CheckWinScreen
+  JMP EngineGameOver  ;;game is displaying ending screen
   
-  LDA gamestate
+CheckWinScreen:
   CMP #STATEWINSCREEN
-  BEQ EngineWinScreen  ;;game is displaying winner screen
+  BNE CheckPlaying
+  JMP EngineWinScreen  ;;game is displaying winner screen
   
-  LDA gamestate
+CheckPlaying:
   CMP #STATEPLAYING
-  BEQ EnginePlaying   ;;game is playing
+  BNE GameEngineDone
+  JMP EnginePlaying   ;;game is playing
 GameEngineDone:  
   
   JSR UpdateSprites  ;;set ball/paddle sprites from positions
@@ -416,7 +446,62 @@ GameEngineDone:
 ;;;;;;;;
  
 EngineTitle:
-  ; Check for START button press on controller 1 or 2
+  ; Decrement input timer if active
+  LDA input_timer
+  BEQ TitleCheckButtons  ; if timer is 0, check buttons
+  DEC input_timer        ; decrement timer
+  JMP GameEngineDone     ; skip button checks while timer is active
+
+TitleCheckButtons:
+  ; Check for UP button press to move cursor up
+  LDA buttons1
+  AND #%00001000      ; UP button
+  BEQ TitleCheckDown  ; if not pressed, check down
+  
+  ; Move to "start" option
+  LDA menu_selection
+  BEQ TitleCheckDown  ; already at start (0), don't move up
+  LDA #$00
+  STA menu_selection
+  LDA #MENU_START_Y
+  STA menu_cursor_y
+  LDA #MENU_START_X
+  STA menu_cursor_x
+  JMP GameEngineDone
+
+TitleCheckDown:
+  ; Check for DOWN button press to move cursor down
+  LDA buttons1
+  AND #%00000100      ; DOWN button
+  BEQ TitleCheckA     ; if not pressed, check A
+  
+  ; Move to "secretos" option
+  LDA menu_selection
+  CMP #$01
+  BEQ TitleCheckA     ; already at secretos (1), don't move down
+  LDA #$01
+  STA menu_selection
+  LDA #MENU_SECRETOS_Y
+  STA menu_cursor_y
+  LDA #MENU_SECRETOS_X
+  STA menu_cursor_x
+  JMP GameEngineDone
+
+TitleCheckA:
+  ; Check for A button press (only if timer is 0)
+  LDA buttons1
+  AND #%10000000      ; A button
+  BEQ TitleCheckStart ; if not pressed, check START
+  
+  ; A button pressed - check which menu item is selected
+  LDA menu_selection
+  BEQ StartGameFromTitle  ; if 0 (start), begin game
+  CMP #$01
+  BEQ EnterSecretosScreen ; if 1 (secretos), go to secretos screen
+  JMP GameEngineDone
+
+TitleCheckStart:
+  ; Check for START button press (works immediately, no timer)
   LDA buttons1
   AND #%00010000      ; START button
   BNE StartGameFromTitle
@@ -424,6 +509,37 @@ EngineTitle:
   LDA buttons2  
   AND #%00010000      ; START button
   BNE StartGameFromTitle
+  
+  JMP GameEngineDone
+
+EnterSecretosScreen:
+  ; Turn screen off
+  LDA #%00000000
+  STA $2001
+  STA $2000             ; also turn off NMI
+  
+  ; Wait for vblank to ensure PPU is ready
+  LDA $2002             ; read PPU status to reset latch
+WaitVBlankSecretos:
+  BIT $2002
+  BPL WaitVBlankSecretos
+  
+  ; Load black screen with tile 0 in center
+  JSR LoadSecretosScreen
+  
+  ; Set game state to secretos
+  LDA #STATESECRETOS
+  STA gamestate
+  
+  ; Set input timer to 120 frames (2 seconds at 60fps)
+  LDA #120
+  STA input_timer
+  
+  ; Turn screen back on
+  LDA #%10010000        ; enable NMI, sprites from Pattern Table 0, background from Pattern Table 1
+  STA $2000
+  LDA #%00011110        ; enable sprites, enable background, no clipping on left side
+  STA $2001
   
   JMP GameEngineDone
 
@@ -462,6 +578,63 @@ WaitVBlankTransition:
   JMP GameEngineDone
 
 ;;;;;;;;; 
+
+EngineSecretos:
+  ; Decrement input timer if active
+  LDA input_timer
+  BEQ SecretosCheckButtons  ; if timer is 0, check buttons
+  DEC input_timer           ; decrement timer
+  JMP GameEngineDone        ; skip button checks while timer is active
+
+SecretosCheckButtons:
+  ; Check for START or A button to return to title screen
+  LDA buttons1
+  AND #%10010000      ; A button or START button
+  BEQ SecretosDone    ; not pressed, stay on secretos screen
+  
+  ; Return to title screen
+  LDA #%00000000
+  STA $2001
+  STA $2000
+  
+  ; Wait for vblank
+  LDA $2002
+WaitVBlankReturnToTitle:
+  BIT $2002
+  BPL WaitVBlankReturnToTitle
+  
+  ; Load title screen CHR bank (bank 0)
+  LDA #$00
+  JSR Bankswitch
+  
+  ; Load title palettes and screen
+  JSR LoadTitlePalettes
+  JSR LoadTitleScreen
+  
+  ; Reset menu to start position
+  LDA #$00
+  STA menu_selection
+  LDA #MENU_START_Y
+  STA menu_cursor_y
+  LDA #MENU_START_X
+  STA menu_cursor_x
+  
+  ; Set input timer to 120 frames (2 seconds) to prevent immediate re-entry
+  LDA #120
+  STA input_timer
+  
+  ; Set state back to title
+  LDA #STATETITLE
+  STA gamestate
+  
+  ; Turn screen back on
+  LDA #%10010000
+  STA $2000
+  LDA #%00011110
+  STA $2001
+
+SecretosDone:
+  JMP GameEngineDone
  
 EngineGameOver:
   ;;if start button pressed
@@ -484,8 +657,58 @@ EngineWinScreen:
   JMP GameEngineDone    ; no start pressed, stay in win screen
 
 RestartGame:
-  ; Reset game to initial state
-  JMP InitializeGame    ; restart the entire game
+  ; Clear win message
+  JSR ClearWinMessage
+
+  ; Reset player positions
+  LDA #$60              ; start high in the air (above ground)
+  STA bally
+  STA ball2y            ; player 2 same Y position
+  
+  LDA #$40              ; player 1 starts on left side
+  STA ballx
+  
+  LDA #$C0              ; player 2 starts on right side  
+  STA ball2x
+
+  ; Reset items
+  LDA #$00
+  STA itemactive       ; no left zone item active
+  STA item2active      ; no right zone item active
+  STA cakeactive       ; no cake active
+  
+  ; Reset physics
+  STA velocity_y       ; no vertical velocity
+  STA jump_pressed     ; no jump pressed
+  STA jump_counter     ; not jumping
+  STA jump_counter2    ; player 2 not jumping
+  STA on_ground        ; player 1 start in air
+  STA on_ground2       ; player 2 start in air
+  STA speed_level      ; reset speed level
+  STA total_score      ; reset combined score
+  STA winner           ; clear winner
+  STA p1_anim_frame    ; reset Player 1 animation
+  STA p1_anim_timer
+  STA p1_facing
+  STA p2_anim_frame    ; reset Player 2 animation
+  STA p2_anim_timer
+  STA p2_facing
+
+  ; Reset scores
+  STA scoreOnes
+  STA scoreTens
+  STA scoreHundreds
+  STA heartCounter
+  STA score2Ones
+  STA score2Tens
+  STA score2Hundreds
+  STA heartCounter2
+
+  ; Set game state to PLAYING (not title screen)
+  LDA #STATEPLAYING
+  STA gamestate
+  
+  JMP GameEngineDone
  
 ;;;;;;;;;;;
 
@@ -1690,9 +1913,13 @@ Player2JumpingTiles:
 
 
 UpdateSprites:
-  ; Check if we're on title screen - if so, hide all sprites
+  ; Check if we're on title screen - if so, show menu cursor only
   LDA gamestate
   CMP #STATETITLE
+  BEQ JumpToDrawMenuCursor
+  
+  ; Check if we're on secretos screen - if so, hide all sprites
+  CMP #STATESECRETOS
   BEQ JumpToHideAllSprites
   
   ; Update Player 1 (16x16 character using sprites 0-3)
@@ -1701,6 +1928,9 @@ UpdateSprites:
   ; Update Player 2 (16x16 character using sprites 4-7)  
   JSR UpdatePlayer2Sprites
   JMP ContinueUpdateSprites
+
+JumpToDrawMenuCursor:
+  JMP DrawMenuCursor
 
 JumpToHideAllSprites:
   JMP HideAllSprites
@@ -1807,6 +2037,33 @@ HideCakeSprite:
   STA $0227
   JMP UpdateSpritesDone
 
+DrawMenuCursor:
+  ; Draw menu cursor sprite (sprite 0) using tile $04
+  LDA menu_cursor_y
+  STA $0200             ; sprite 0 Y position
+  
+  LDA #$04              ; tile $04 for cursor
+  STA $0201             ; sprite 0 tile
+  
+  LDA #$00              ; attributes (palette 0, no flip)
+  STA $0202             ; sprite 0 attributes
+  
+  LDA menu_cursor_x
+  STA $0203             ; sprite 0 X position
+  
+  ; Hide all other sprites (sprites 1-9)
+  LDX #$04              ; start at sprite 1 (offset 4)
+HideTitleSpritesLoop:
+  LDA #$FF              ; Y position off screen
+  STA $0200, X          ; set Y position
+  INX
+  INX
+  INX
+  INX                   ; move to next sprite (4 bytes per sprite)
+  CPX #$28              ; check if we've done sprites 1-9 = 36 bytes (4 to 40)
+  BNE HideTitleSpritesLoop
+  RTS
+
 HideAllSprites:
   ; Hide all sprites by moving them off screen
   LDX #$00              ; start with sprite 0
@@ -1829,6 +2086,10 @@ DrawScore:
   ; Check if we're on title screen - if so, skip drawing score
   LDA gamestate
   CMP #STATETITLE
+  BEQ SkipDrawScore
+  
+  ; Check if we're on secretos screen - if so, skip drawing score
+  CMP #STATESECRETOS
   BEQ SkipDrawScore
   
   ; Check if we're in win screen state
@@ -2240,6 +2501,40 @@ TitleInsideLoop:
   INX
   CPX #$04
   BNE TitleOutsideLoop  ; run the outside loop 4 times before continuing down
+  RTS
+
+LoadSecretosScreen:
+  ; Fill entire screen with black (tile $00)
+  LDA $2002             ; read PPU status to reset the high/low latch
+  LDA #$20
+  STA $2006             ; write the high byte of $2000 address
+  LDA #$00
+  STA $2006             ; write the low byte of $2000 address
+
+  LDX #$00              ; outer loop counter (4 pages)
+  LDY #$00              ; inner loop counter (256 bytes per page)
+SecretosOutsideLoop:
+SecretosInsideLoop:
+  LDA #$00              ; tile 0 (black)
+  STA $2007             ; write to PPU
+  INY                   ; increment inner counter
+  CPY #$00
+  BNE SecretosInsideLoop ; run 256 times
+  
+  INX                   ; increment outer counter
+  CPX #$04
+  BNE SecretosOutsideLoop ; run 4 times (4 * 256 = 1024 tiles)
+  
+  ; Now draw a single tile 0 in the center of the screen
+  ; Center is at row 15, column 16 (approximately middle)
+  ; PPU address = $2000 + (15 * 32) + 16 = $2000 + $1E0 + $10 = $21F0
+  LDA $2002             ; reset PPU latch
+  LDA #$21
+  STA $2006             ; high byte
+  LDA #$F0
+  STA $2006             ; low byte
+  LDA #$00              ; tile 0
+  STA $2007             ; draw tile 0 in center
   RTS
   
   
