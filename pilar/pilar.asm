@@ -88,8 +88,10 @@ secret_message .rs 1  ; 0=no message, 1=error, 2=success
 secret_input_delay .rs 1  ; delay timer for button inputs (30 frames)
 secret_draw_flag .rs 1  ; 1=need to redraw UI during next NMI, 0=no draw needed
 secret_msg_index .rs 1  ; which secret message to display (0, 1, 2, etc)
-secret_msg_char_index_lo .rs 1  ; current character being written (low byte)
-secret_msg_char_index_hi .rs 1  ; current character being written (high byte)
+secret_msg_char_index_lo .rs 1  ; current character in message data (low byte)
+secret_msg_char_index_hi .rs 1  ; current character in message data (high byte)
+secret_msg_screen_pos_lo .rs 1  ; current screen position for writing (low byte)
+secret_msg_screen_pos_hi .rs 1  ; current screen position for writing (high byte)
 secret_msg_timer .rs 1  ; timer for character writing speed
 secret_msg_draw_flag .rs 1  ; 1=need to write next character during NMI, 0=no write needed
 
@@ -3050,8 +3052,10 @@ ClearOldUILoop:
   
   ; Initialize message display
   LDA #$00
-  STA secret_msg_char_index_lo  ; start at character 0 (low byte)
-  STA secret_msg_char_index_hi  ; start at character 0 (high byte)
+  STA secret_msg_char_index_lo  ; start at character 0 in message data (low byte)
+  STA secret_msg_char_index_hi  ; start at character 0 in message data (high byte)
+  STA secret_msg_screen_pos_lo  ; start at screen position 0 (low byte)
+  STA secret_msg_screen_pos_hi  ; start at screen position 0 (high byte)
   STA secret_msg_draw_flag   ; no message draw flag
   STA secret_draw_flag       ; clear secretos UI draw flag (important!)
   STA secret_message         ; clear any error messages
@@ -3154,23 +3158,25 @@ WriteMsg1Page3:
   
 WriteMsg1CheckEnd:
   CMP #$FF              ; $FF = end of message marker
-  BEQ WriteNextCharDone
+  BEQ JumpToWriteNextCharDone
+  CMP #$FE              ; $FE = line break marker (fill rest of line with spaces)
+  BEQ HandleLineBreak
   
-  ; Save character temporarily
+  ; Normal character - save temporarily
   PHA
   
-  ; Calculate PPU address: $2020 + char_index (start at row 1, col 0)
+  ; Calculate PPU address: $2020 + screen_pos (start at row 1, col 0)
   LDA $2002             ; reset PPU latch
   
-  ; Calculate address: $2020 + char_index (16-bit addition)
-  ; First add $20 to char_index_lo
-  LDA secret_msg_char_index_lo
+  ; Calculate address: $2020 + screen_pos (16-bit addition)
+  ; First add $20 to screen_pos_lo
+  LDA secret_msg_screen_pos_lo
   CLC
   ADC #$20
   TAX                   ; save low byte in X
   
-  ; Then add carry to char_index_hi and add $20 to result
-  LDA secret_msg_char_index_hi
+  ; Then add carry to screen_pos_hi and add $20 to result
+  LDA secret_msg_screen_pos_hi
   ADC #$20              ; add $20 + carry from previous addition
   STA $2006             ; write high byte
   
@@ -3182,7 +3188,66 @@ WriteMsg1CheckEnd:
   PLA
   STA $2007
   
-  ; Increment 16-bit character index
+  ; Increment screen position
+  INC secret_msg_screen_pos_lo
+  BNE NormalCharDone
+  INC secret_msg_screen_pos_hi
+  JMP NormalCharDone
+
+HandleLineBreak:
+  ; Line break: advance screen position to start of next line
+  ; First, increment char_index to skip past the $FE marker
+  INC secret_msg_char_index_lo
+  BNE LineBreakNoCarry
+  INC secret_msg_char_index_hi
+LineBreakNoCarry:
+  
+  ; Calculate how many spaces needed: 32 - (screen_pos_lo % 32)
+  LDA secret_msg_screen_pos_lo
+  AND #%00011111        ; get position in current line (0-31)
+  BEQ LineBreakDone     ; if at start of line (0), already aligned
+  
+  ; Calculate spaces needed: 32 - position
+  STA pointerLo         ; temp store position
+  LDA #$20              ; 32
+  SEC
+  SBC pointerLo         ; 32 - position = spaces needed
+  STA pointerLo         ; store count
+  
+  ; Set up PPU address for filling
+  LDA $2002             ; reset PPU latch
+  LDA secret_msg_screen_pos_lo
+  CLC
+  ADC #$20
+  TAX
+  LDA secret_msg_screen_pos_hi
+  ADC #$20
+  STA $2006
+  TXA
+  STA $2006
+  
+  ; Fill with spaces
+  LDY pointerLo         ; Y = number of spaces to write
+FillSpacesLoop:
+  LDA #$24              ; space tile
+  STA $2007
+  DEY
+  BNE FillSpacesLoop
+  
+  ; Add spaces count to screen_pos
+  LDA secret_msg_screen_pos_lo
+  CLC
+  ADC pointerLo
+  STA secret_msg_screen_pos_lo
+  BCC LineBreakDone
+  INC secret_msg_screen_pos_hi
+  
+LineBreakDone:
+  JMP WriteNextCharDone
+
+NormalCharDone:
+  
+  ; Increment 16-bit character index (in message data)
   INC secret_msg_char_index_lo
   BNE CheckIfSpace
   INC secret_msg_char_index_hi
@@ -3240,58 +3305,59 @@ SecretMessage0:
   ; T   H   I   S   _   I   S   _   A   _   S   E   C   R   E   T   _   M   E   S   S   A   G   E   (end)
 
 SecretMessage1:
-  ; Line 1: " 1998, tambien conocido   " (1 space margin at start and end)
-  .db $24,$01,$09,$09,$08,$2D,$24,$1D,$0A,$16,$0B,$12,$0E,$17,$24,$0C,$18,$17,$18,$0C,$12,$0D,$18,$24,$24,$24,$24,$24,$24,$24,$24,$24
-  ; Line 2: " como el ano 1 de la Era  " 
-  .db $24,$0C,$18,$16,$18,$24,$0E,$15,$24,$01,$24,$0D,$0E,$24,$15,$0A,$24,$0E,$1B,$0A,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-  ; Line 3: " Pilar.                   "
-  .db $24,$19,$12,$15,$0A,$1B,$2F,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-  ; Line 4: "                          " (empty line)
-  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-  ; Line 5: " Desde las canciones de   "
-  .db $24,$0D,$0E,$1C,$0D,$0E,$24,$15,$0A,$1C,$24,$0C,$0A,$17,$0C,$12,$18,$17,$0E,$1C,$24,$0D,$0E,$24,$24,$24,$24,$24,$24,$24,$24,$24
-  ; Line 6: " Miguelito hasta hoy,     "
-  .db $24,$16,$12,$10,$1E,$0E,$15,$12,$1D,$18,$24,$11,$0A,$1C,$1D,$0A,$24,$11,$18,$22,$2D,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-  ; Line 7: " pasando por el cielo     "
-  .db $24,$19,$0A,$1C,$0A,$17,$0D,$18,$24,$19,$18,$1B,$24,$0E,$15,$24,$0C,$12,$0E,$15,$18,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-  ; Line 8: " color Barbie, las        "
-  .db $24,$0C,$18,$15,$18,$1B,$24,$0B,$0A,$1B,$0B,$12,$0E,$2D,$24,$15,$0A,$1C,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
+  ; Compressed format: actual text only, $FE = line break (fill rest of line with spaces)
+  ; Line 1: " 1998, tambien conocido"
+  .db $24,$01,$09,$09,$08,$2D,$24,$1D,$0A,$16,$0B,$12,$0E,$17,$24,$0C,$18,$17,$18,$0C,$12,$0D,$18,$FE
+  ; Line 2: " como el 1 de la Era"
+  .db $24,$0C,$18,$16,$18,$24,$0E,$15,$24,$01,$24,$0D,$0E,$24,$15,$0A,$24,$0E,$1B,$0A,$FE
+  ; Line 3: " Pilar."
+  .db $24,$19,$12,$15,$0A,$1B,$2F,$FE
+  ; Line 4: (empty line)
+  .db $FE
+  ; Line 5: " Desde las canciones de"
+  .db $24,$0D,$0E,$1C,$0D,$0E,$24,$15,$0A,$1C,$24,$0C,$0A,$17,$0C,$12,$18,$17,$0E,$1C,$24,$0D,$0E,$FE
+  ; Line 6: " Miguelito hasta hoy,"
+  .db $24,$16,$12,$10,$1E,$0E,$15,$12,$1D,$18,$24,$11,$0A,$1C,$1D,$0A,$24,$11,$18,$22,$2D,$FE
+  ; Line 7: " pasando por el cielo"
+  .db $24,$19,$0A,$1C,$0A,$17,$0D,$18,$24,$19,$18,$1B,$24,$0E,$15,$24,$0C,$12,$0E,$15,$18,$FE
+  ; Line 8: " color Barbie, las"
+  .db $24,$0C,$18,$15,$18,$1B,$24,$0B,$0A,$1B,$0B,$12,$0E,$2D,$24,$15,$0A,$1C,$FE
   ; Line 9: " repartijas de chocolates,"
-  .db $24,$1B,$0E,$19,$0A,$1B,$1D,$12,$13,$0A,$1C,$24,$0D,$0E,$24,$0C,$11,$18,$0C,$18,$15,$0A,$1D,$0E,$1C,$2D,$24,$24,$24,$24,$24,$24
-  ; Line 10: " los VHS sucios de Mi     "
-  .db $24,$15,$18,$1C,$24,$1F,$11,$1C,$24,$1C,$1E,$0C,$12,$18,$1C,$24,$0D,$0E,$24,$16,$12,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
+  .db $24,$1B,$0E,$19,$0A,$1B,$1D,$12,$13,$0A,$1C,$24,$0D,$0E,$24,$0C,$11,$18,$0C,$18,$15,$0A,$1D,$0E,$1C,$2D,$FE
+  ; Line 10: " los VHS sucios de Mi"
+  .db $24,$15,$18,$1C,$24,$1F,$11,$1C,$24,$1C,$1E,$0C,$12,$18,$1C,$24,$0D,$0E,$24,$16,$12,$FE
   ; Line 11: " Pequeno Pony y los juegos"
-  .db $24,$19,$0E,$1A,$1E,$0E,$17,$18,$24,$19,$18,$17,$22,$24,$22,$24,$15,$18,$1C,$24,$13,$1E,$0E,$10,$18,$1C,$24,$24,$24,$24,$24,$24
-  ; Line 12: " de PC de la tortuga      "
-  .db $24,$0D,$0E,$24,$19,$0C,$24,$0D,$0E,$24,$15,$0A,$24,$1D,$18,$1B,$1D,$1E,$10,$0A,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-  ; Line 13: " Manuelita que siempre    "
-  .db $24,$16,$0A,$17,$1E,$0E,$15,$12,$1D,$0A,$24,$1A,$1E,$0E,$24,$1C,$12,$0E,$16,$19,$1B,$0E,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-  ; Line 14: " terminaban rompiendo     "
-  .db $24,$1D,$0E,$1B,$16,$12,$17,$0A,$0B,$0A,$17,$24,$1B,$18,$16,$19,$12,$0E,$17,$0D,$18,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-  ; Line 15: " todo. Con arte y         "
-  .db $24,$1D,$18,$0D,$18,$2F,$24,$0C,$18,$17,$24,$0A,$1B,$1D,$0E,$24,$22,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-  ; Line 16: " canciones compartimos lo "
-  .db $24,$0C,$0A,$17,$0C,$12,$18,$17,$0E,$1C,$24,$0C,$18,$16,$19,$0A,$1B,$1D,$12,$16,$18,$1C,$24,$15,$18,$24,$24,$24,$24,$24,$24,$24
+  .db $24,$19,$0E,$1A,$1E,$0E,$17,$18,$24,$19,$18,$17,$22,$24,$22,$24,$15,$18,$1C,$24,$13,$1E,$0E,$10,$18,$1C,$FE
+  ; Line 12: " de PC de la tortuga"
+  .db $24,$0D,$0E,$24,$19,$0C,$24,$0D,$0E,$24,$15,$0A,$24,$1D,$18,$1B,$1D,$1E,$10,$0A,$FE
+  ; Line 13: " Manuelita que siempre"
+  .db $24,$16,$0A,$17,$1E,$0E,$15,$12,$1D,$0A,$24,$1A,$1E,$0E,$24,$1C,$12,$0E,$16,$19,$1B,$0E,$FE
+  ; Line 14: " terminaban rompiendo"
+  .db $24,$1D,$0E,$1B,$16,$12,$17,$0A,$0B,$0A,$17,$24,$1B,$18,$16,$19,$12,$0E,$17,$0D,$18,$FE
+  ; Line 15: " todo. Con arte y"
+  .db $24,$1D,$18,$0D,$18,$2F,$24,$0C,$18,$17,$24,$0A,$1B,$1D,$0E,$24,$22,$FE
+  ; Line 16: " canciones compartimos lo"
+  .db $24,$0C,$0A,$17,$0C,$12,$18,$17,$0E,$1C,$24,$0C,$18,$16,$19,$0A,$1B,$1D,$12,$16,$18,$1C,$24,$15,$18,$FE
   ; Line 17: " que creimos la ultima era"
-  .db $24,$1A,$1E,$0E,$24,$0C,$1B,$0E,$12,$16,$18,$1C,$24,$15,$0A,$24,$1E,$15,$1D,$12,$16,$0A,$24,$0E,$1B,$0A,$24,$24,$24,$24,$24,$24
-  ; Line 18: " de la familia, pero hoy  "
-  .db $24,$0D,$0E,$24,$15,$0A,$24,$0F,$0A,$16,$12,$15,$12,$0A,$2D,$24,$19,$0E,$1B,$18,$24,$11,$18,$22,$24,$24,$24,$24,$24,$24,$24,$24
-  ; Line 19: " sabemos que esa historia "
-  .db $24,$1C,$0A,$0B,$0E,$16,$18,$1C,$24,$1A,$1E,$0E,$24,$0E,$1C,$0A,$24,$11,$12,$1C,$1D,$18,$1B,$12,$0A,$24,$24,$24,$24,$24,$24,$24
-  ; Line 20: " sigue creciendo,         "
-  .db $24,$1C,$12,$10,$1E,$0E,$24,$0C,$1B,$0E,$0C,$12,$0E,$17,$0D,$18,$2D,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-  ; Line 21: " expandiendose mas que    "
-  .db $24,$0E,$21,$19,$0A,$17,$0D,$12,$0E,$17,$0D,$18,$1C,$0E,$24,$16,$0A,$1C,$24,$1A,$1E,$0E,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-  ; Line 22: " nunca.                   "
-  .db $24,$17,$1E,$17,$0C,$0A,$2F,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-  ; Line 23: "                          " (empty line)
-  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-  ; Line 24: "                          " (empty line)
-  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-  ; Line 25: " Te amamos.               "
-  .db $24,$1D,$0E,$24,$0A,$16,$0A,$16,$18,$1C,$2F,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-  ; Line 26: " Tu familia.              "
-  .db $24,$1D,$1E,$24,$0F,$0A,$16,$12,$15,$12,$0A,$2F,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$FF
+  .db $24,$1A,$1E,$0E,$24,$0C,$1B,$0E,$12,$16,$18,$1C,$24,$15,$0A,$24,$1E,$15,$1D,$12,$16,$0A,$24,$0E,$1B,$0A,$FE
+  ; Line 18: " de la familia, pero hoy"
+  .db $24,$0D,$0E,$24,$15,$0A,$24,$0F,$0A,$16,$12,$15,$12,$0A,$2D,$24,$19,$0E,$1B,$18,$24,$11,$18,$22,$FE
+  ; Line 19: " sabemos que esa historia"
+  .db $24,$1C,$0A,$0B,$0E,$16,$18,$1C,$24,$1A,$1E,$0E,$24,$0E,$1C,$0A,$24,$11,$12,$1C,$1D,$18,$1B,$12,$0A,$FE
+  ; Line 20: " sigue creciendo,"
+  .db $24,$1C,$12,$10,$1E,$0E,$24,$0C,$1B,$0E,$0C,$12,$0E,$17,$0D,$18,$2D,$FE
+  ; Line 21: " expandiendose mas que"
+  .db $24,$0E,$21,$19,$0A,$17,$0D,$12,$0E,$17,$0D,$18,$1C,$0E,$24,$16,$0A,$1C,$24,$1A,$1E,$0E,$FE
+  ; Line 22: " nunca."
+  .db $24,$17,$1E,$17,$0C,$0A,$2F,$FE
+  ; Line 23: (empty line)
+  .db $FE
+  ; Line 24: (empty line)
+  .db $FE
+  ; Line 25: " Te amamos."
+  .db $24,$1D,$0E,$24,$0A,$16,$0A,$16,$18,$1C,$2F,$FE
+  ; Line 26: " Tu familia."
+  .db $24,$1D,$1E,$24,$0F,$0A,$16,$12,$15,$12,$0A,$2F,$FF
   ; (end marker)
   
   
