@@ -87,6 +87,11 @@ secret_cursor  .rs 1  ; which digit is selected (0-3)
 secret_message .rs 1  ; 0=no message, 1=error, 2=success
 secret_input_delay .rs 1  ; delay timer for button inputs (30 frames)
 secret_draw_flag .rs 1  ; 1=need to redraw UI during next NMI, 0=no draw needed
+secret_msg_index .rs 1  ; which secret message to display (0, 1, 2, etc)
+secret_msg_char_index_lo .rs 1  ; current character being written (low byte)
+secret_msg_char_index_hi .rs 1  ; current character being written (high byte)
+secret_msg_timer .rs 1  ; timer for character writing speed
+secret_msg_draw_flag .rs 1  ; 1=need to write next character during NMI, 0=no write needed
 
 
 ;; DECLARE SOME CONSTANTS HERE
@@ -95,6 +100,7 @@ STATEPLAYING   = $01  ; move paddles/ball, check for collisions
 STATEGAMEOVER  = $02  ; displaying game over screen
 STATEWINSCREEN = $03  ; displaying winner screen
 STATESECRETOS  = $04  ; displaying secretos screen
+STATESECRETMSG = $05  ; displaying secret message
   
 RIGHTWALL      = $F4  ; when ball reaches one of these, do something
 TOPWALL        = $20
@@ -116,7 +122,7 @@ IDLE_FRAME     = $FF  ; special value to indicate idle state
 
 ; Title screen menu constants
 MENU_START_Y   = $68  ; Y position for "start" option (13 * 8 = 104 = $68)
-MENU_START_X   = $58  ; X position for "start" cursor (11 * 8 = 88 = $58)
+MENU_START_X   = $40  ; X position for "start" cursor (8 * 8 = 64 = $40)
 MENU_SECRETOS_Y = $78 ; Y position for "secretos" option (15 * 8 = 120 = $78)
 MENU_SECRETOS_X = $50 ; X position for "secretos" cursor (10 * 8 = 80 = $50)
 
@@ -403,13 +409,24 @@ NMI:
 
   JSR DrawScore
   
-  ; Check if we need to draw secretos UI
+  ; Check if we need to draw secretos UI (only if in secretos state)
+  LDA gamestate
+  CMP #STATESECRETOS
+  BNE SkipSecretDraw    ; not in secretos state, skip
   LDA secret_draw_flag
   BEQ SkipSecretDraw
   JSR DrawSecretosUI
   LDA #$00
   STA secret_draw_flag  ; clear flag after drawing
 SkipSecretDraw:
+
+  ; Check if we need to write next character of secret message
+  LDA secret_msg_draw_flag
+  BEQ SkipSecretMsgDraw
+  JSR WriteNextCharacter
+  LDA #$00
+  STA secret_msg_draw_flag  ; clear flag after writing
+SkipSecretMsgDraw:
 
   ;;This is the PPU clean up section, so rendering the next frame starts properly.
   LDA #%10010000   ; enable NMI, sprites from Pattern Table 0, background from Pattern Table 1
@@ -434,8 +451,13 @@ GameEngine:
   
 CheckSecretos:
   CMP #STATESECRETOS
-  BNE CheckGameOver
+  BNE CheckSecretMsg
   JMP EngineSecretos  ;;game is displaying secretos screen
+
+CheckSecretMsg:
+  CMP #STATESECRETMSG
+  BNE CheckGameOver
+  JMP EngineSecretMessage  ;;game is displaying secret message
     
 CheckGameOver:
   CMP #STATEGAMEOVER
@@ -740,6 +762,73 @@ WaitVBlankReturnToTitle:
   JMP GameEngineDone
 
 SecretosDone:
+  JMP GameEngineDone
+
+EngineSecretMessage:
+  ; Display secret message character by character
+  ; Decrement timer
+  DEC secret_msg_timer
+  LDA secret_msg_timer
+  BNE CheckSecretMsgButtons  ; if timer not 0, check buttons
+  
+  ; Timer reached 0, set flag to write next character during NMI
+  LDA #$03                    ; reset timer
+  STA secret_msg_timer
+  LDA #$01                    ; set flag to write during NMI
+  STA secret_msg_draw_flag
+  JMP CheckSecretMsgButtons
+
+CheckSecretMsgButtons:
+  ; Check for B button to return to title screen
+  LDA buttons1
+  AND #%01000000      ; B button
+  BEQ SecretMsgDone
+  JMP ReturnToTitleFromSecret
+
+SecretMsgDone:
+  JMP GameEngineDone
+
+ReturnToTitleFromSecret:
+  ; Return to title screen
+  LDA #%00000000
+  STA $2001
+  STA $2000
+  
+  ; Wait for vblank
+  LDA $2002
+WaitVBlankReturnToTitle2:
+  BIT $2002
+  BPL WaitVBlankReturnToTitle2
+  
+  ; Load title screen CHR bank (bank 0)
+  LDA #$00
+  JSR Bankswitch
+  
+  ; Load title palettes and screen
+  JSR LoadTitlePalettes
+  JSR LoadTitleScreen
+  
+  ; Reset menu to start position
+  LDA #$00
+  STA menu_selection
+  LDA #MENU_START_Y
+  STA menu_cursor_y
+  LDA #MENU_START_X
+  STA menu_cursor_x
+  
+  ; Set input timer
+  LDA #60
+  STA input_timer
+  
+  ; Set state back to title
+  LDA #STATETITLE
+  STA gamestate
+  
+  ; Turn screen back on
+  LDA #%10010000
+  STA $2000
+  LDA #%00011110
+  STA $2001
   JMP GameEngineDone
  
 EngineGameOver:
@@ -2028,6 +2117,10 @@ UpdateSprites:
   CMP #STATESECRETOS
   BEQ JumpToHideAllSprites
   
+  ; Check if we're on secret message screen - if so, hide all sprites
+  CMP #STATESECRETMSG
+  BEQ JumpToHideAllSprites
+  
   ; Update Player 1 (16x16 character using sprites 0-3)
   JSR UpdatePlayer1Sprites
   
@@ -2151,7 +2244,7 @@ DrawMenuCursor:
   LDA #$04              ; tile $04 for cursor
   STA $0201             ; sprite 0 tile
   
-  LDA #$00              ; attributes (palette 0, no flip)
+  LDA #$02              ; attributes (palette 2, no flip)
   STA $0202             ; sprite 0 attributes
   
   LDA menu_cursor_x
@@ -2196,6 +2289,10 @@ DrawScore:
   
   ; Check if we're on secretos screen - if so, skip drawing score
   CMP #STATESECRETOS
+  BEQ SkipDrawScore
+  
+  ; Check if we're on secret message screen - if so, skip drawing score
+  CMP #STATESECRETMSG
   BEQ SkipDrawScore
   
   ; Check if we're in win screen state
@@ -2874,29 +2971,328 @@ WrapDigit3To9:
 
 CheckSecretCode:
   ; Check if the entered code matches any secrets
-  ; For now, just check for 1234 as an example
+  ; Check for code 1234 (secret message 0)
   LDA secret_digit1
   CMP #$01
-  BNE SecretCodeError
+  BNE CheckCode2
   LDA secret_digit2
   CMP #$02
-  BNE SecretCodeError
+  BNE CheckCode2
   LDA secret_digit3
   CMP #$03
-  BNE SecretCodeError
+  BNE CheckCode2
   LDA secret_digit4
   CMP #$04
-  BNE SecretCodeError
+  BNE CheckCode2
   
-  ; Success!
-  LDA #$02
-  STA secret_message
-  RTS
+  ; Success! Code 1234 found
+  LDA #$00              ; message index 0
+  STA secret_msg_index
+  JMP ShowSecretMessage
 
-SecretCodeError:
+CheckCode2:
+  ; Check for code 1998 (secret message 1)
+  LDA secret_digit1
+  CMP #$01
+  BNE CheckCodeError
+  LDA secret_digit2
+  CMP #$09
+  BNE CheckCodeError
+  LDA secret_digit3
+  CMP #$09
+  BNE CheckCodeError
+  LDA secret_digit4
+  CMP #$08
+  BNE CheckCodeError
+  
+  ; Success! Code 1998 found
+  LDA #$01              ; message index 1
+  STA secret_msg_index
+  JMP ShowSecretMessage
+
+CheckCodeError:
+  ; No match found, show error
   LDA #$01
   STA secret_message
   RTS
+
+ShowSecretMessage:
+  ; Transition to secret message display state
+  ; Turn screen off
+  LDA #%00000000
+  STA $2001
+  STA $2000
+  
+  ; Wait for vblank
+  LDA $2002
+WaitVBlankForMessage:
+  BIT $2002
+  BPL WaitVBlankForMessage
+  
+  ; Clear screen completely (fill with spaces)
+  JSR LoadSecretosScreen
+  
+  ; Clear the area where the old secretos UI was (rows 14-17)
+  ; This ensures no leftover digits or messages
+  LDA $2002
+  LDA #$21
+  STA $2006
+  LDA #$C0              ; Start of row 14
+  STA $2006
+  
+  LDX #$00
+ClearOldUILoop:
+  LDA #$24              ; Space tile
+  STA $2007
+  INX
+  CPX #$80              ; Clear 128 tiles (4 rows * 32 columns)
+  BNE ClearOldUILoop
+  
+  ; Initialize message display
+  LDA #$00
+  STA secret_msg_char_index_lo  ; start at character 0 (low byte)
+  STA secret_msg_char_index_hi  ; start at character 0 (high byte)
+  STA secret_msg_draw_flag   ; no message draw flag
+  STA secret_draw_flag       ; clear secretos UI draw flag (important!)
+  STA secret_message         ; clear any error messages
+  LDA #$03                   ; 3 frames per character
+  STA secret_msg_timer
+  
+  ; Set state to secret message
+  LDA #STATESECRETMSG
+  STA gamestate
+  
+  ; Turn screen back on
+  LDA #%10010000
+  STA $2000
+  LDA #%00011110
+  STA $2001
+  RTS
+
+WriteNextCharacter:
+  ; Write the next character of the secret message
+  ; Check which message to display
+  LDA secret_msg_index
+  CMP #$00
+  BEQ WriteMessage0
+  CMP #$01
+  BEQ WriteMessage1
+  JMP WriteNextCharDone  ; unknown message
+  
+WriteMessage0:
+  ; Get character from message 0 (uses 8-bit index, message is short)
+  LDX secret_msg_char_index_lo
+  LDA SecretMessage0, X
+  CMP #$FF              ; $FF = end of message marker
+  BEQ JumpToWriteNextCharDone
+  
+  ; Calculate PPU address: $2000 + char_index
+  ; Start at row 10, column 2 = $2000 + (10 * 32) + 2 = $2000 + $142 = $2142
+  LDA $2002             ; reset PPU latch
+  LDA #$21
+  STA $2006
+  
+  ; Calculate low byte: $42 + char_index
+  LDA #$42
+  CLC
+  ADC secret_msg_char_index_lo
+  STA $2006
+  
+  ; Write the character
+  LDX secret_msg_char_index_lo
+  LDA SecretMessage0, X
+  STA $2007
+  
+  ; Increment 16-bit character index
+  INC secret_msg_char_index_lo
+  BNE WriteMsg0Done
+  INC secret_msg_char_index_hi
+WriteMsg0Done:
+  JMP WriteNextCharDone
+
+JumpToWriteNextCharDone:
+  JMP WriteNextCharDone
+
+WriteMessage1:
+  ; Get character from message 1 (uses 16-bit index for long messages)
+  ; Use Y-indexed addressing with base pointer
+  
+  ; Check if we need to adjust the base pointer
+  ; We'll use Y register for offset (0-255) and adjust base when needed
+  LDY secret_msg_char_index_lo
+  
+  ; Check if char_index_hi is 0 (first 256 chars)
+  LDA secret_msg_char_index_hi
+  BEQ WriteMsg1Page0
+  
+  ; For pages 1+ (256+ chars), read from SecretMessage1 + 256*hi + lo
+  ; This is tricky - we need to use absolute indexed addressing
+  ; Let's set up a pointer to the right page
+  CMP #$01
+  BEQ WriteMsg1Page1
+  CMP #$02
+  BEQ WriteMsg1Page2
+  CMP #$03
+  BEQ WriteMsg1Page3
+  JMP WriteNextCharDone  ; beyond our message
+  
+WriteMsg1Page0:
+  LDA SecretMessage1, Y
+  JMP WriteMsg1CheckEnd
+  
+WriteMsg1Page1:
+  LDA SecretMessage1+256, Y
+  JMP WriteMsg1CheckEnd
+  
+WriteMsg1Page2:
+  LDA SecretMessage1+512, Y
+  JMP WriteMsg1CheckEnd
+  
+WriteMsg1Page3:
+  LDA SecretMessage1+768, Y
+  JMP WriteMsg1CheckEnd
+  
+WriteMsg1CheckEnd:
+  CMP #$FF              ; $FF = end of message marker
+  BEQ WriteNextCharDone
+  
+  ; Save character temporarily
+  PHA
+  
+  ; Calculate PPU address: $2020 + char_index (start at row 1, col 0)
+  LDA $2002             ; reset PPU latch
+  
+  ; Calculate address: $2020 + char_index (16-bit addition)
+  ; First add $20 to char_index_lo
+  LDA secret_msg_char_index_lo
+  CLC
+  ADC #$20
+  TAX                   ; save low byte in X
+  
+  ; Then add carry to char_index_hi and add $20 to result
+  LDA secret_msg_char_index_hi
+  ADC #$20              ; add $20 + carry from previous addition
+  STA $2006             ; write high byte
+  
+  ; Write low byte
+  TXA
+  STA $2006
+  
+  ; Write the character (restore from stack)
+  PLA
+  STA $2007
+  
+  ; Increment 16-bit character index
+  INC secret_msg_char_index_lo
+  BNE CheckIfSpace
+  INC secret_msg_char_index_hi
+  
+CheckIfSpace:
+  ; Check if we just wrote a space ($24)
+  ; If so, immediately trigger next character write (skip timer delay)
+  CMP #$24
+  BNE WriteNextCharDone  ; not a space, done normally
+  
+  ; It was a space - check if next character is also a space
+  ; We need to peek at the next character without incrementing yet
+  LDY secret_msg_char_index_lo
+  LDA secret_msg_char_index_hi
+  BEQ CheckSpacePage0
+  CMP #$01
+  BEQ CheckSpacePage1
+  CMP #$02
+  BEQ CheckSpacePage2
+  CMP #$03
+  BEQ CheckSpacePage3
+  JMP WriteNextCharDone
+  
+CheckSpacePage0:
+  LDA SecretMessage1, Y
+  JMP CheckSpaceResult
+CheckSpacePage1:
+  LDA SecretMessage1+256, Y
+  JMP CheckSpaceResult
+CheckSpacePage2:
+  LDA SecretMessage1+512, Y
+  JMP CheckSpaceResult
+CheckSpacePage3:
+  LDA SecretMessage1+768, Y
+  
+CheckSpaceResult:
+  CMP #$24              ; is next char also a space?
+  BNE WriteNextCharDone ; no, done normally
+  CMP #$FF              ; is it end marker?
+  BEQ WriteNextCharDone ; yes, stop
+  
+  ; Next char is also a space - set flag to write it immediately on next NMI
+  LDA #$01
+  STA secret_msg_draw_flag
+  ; Also reset timer to 1 so it triggers immediately next frame
+  STA secret_msg_timer
+  
+WriteNextCharDone:
+  RTS
+
+; Secret message data
+; Message 0 (for code 1234): "THIS IS A SECRET MESSAGE"
+SecretMessage0:
+  .db $1D,$11,$12,$1C,$24,$12,$1C,$24,$0A,$24,$1C,$0E,$0C,$1B,$0E,$1D,$24,$16,$0E,$1C,$1C,$0A,$10,$0E,$FF
+  ; T   H   I   S   _   I   S   _   A   _   S   E   C   R   E   T   _   M   E   S   S   A   G   E   (end)
+
+SecretMessage1:
+  ; Line 1: " 1998, tambien conocido   " (1 space margin at start and end)
+  .db $24,$01,$09,$09,$08,$2D,$24,$1D,$0A,$16,$0B,$12,$0E,$17,$24,$0C,$18,$17,$18,$0C,$12,$0D,$18,$24,$24,$24,$24,$24,$24,$24,$24,$24
+  ; Line 2: " como el ano 1 de la Era  " 
+  .db $24,$0C,$18,$16,$18,$24,$0E,$15,$24,$01,$24,$0D,$0E,$24,$15,$0A,$24,$0E,$1B,$0A,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
+  ; Line 3: " Pilar.                   "
+  .db $24,$19,$12,$15,$0A,$1B,$2F,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
+  ; Line 4: "                          " (empty line)
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
+  ; Line 5: " Desde las canciones de   "
+  .db $24,$0D,$0E,$1C,$0D,$0E,$24,$15,$0A,$1C,$24,$0C,$0A,$17,$0C,$12,$18,$17,$0E,$1C,$24,$0D,$0E,$24,$24,$24,$24,$24,$24,$24,$24,$24
+  ; Line 6: " Miguelito hasta hoy,     "
+  .db $24,$16,$12,$10,$1E,$0E,$15,$12,$1D,$18,$24,$11,$0A,$1C,$1D,$0A,$24,$11,$18,$22,$2D,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
+  ; Line 7: " pasando por el cielo     "
+  .db $24,$19,$0A,$1C,$0A,$17,$0D,$18,$24,$19,$18,$1B,$24,$0E,$15,$24,$0C,$12,$0E,$15,$18,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
+  ; Line 8: " color Barbie, las        "
+  .db $24,$0C,$18,$15,$18,$1B,$24,$0B,$0A,$1B,$0B,$12,$0E,$2D,$24,$15,$0A,$1C,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
+  ; Line 9: " repartijas de chocolates,"
+  .db $24,$1B,$0E,$19,$0A,$1B,$1D,$12,$13,$0A,$1C,$24,$0D,$0E,$24,$0C,$11,$18,$0C,$18,$15,$0A,$1D,$0E,$1C,$2D,$24,$24,$24,$24,$24,$24
+  ; Line 10: " los VHS sucios de Mi     "
+  .db $24,$15,$18,$1C,$24,$1F,$11,$1C,$24,$1C,$1E,$0C,$12,$18,$1C,$24,$0D,$0E,$24,$16,$12,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
+  ; Line 11: " Pequeno Pony y los juegos"
+  .db $24,$19,$0E,$1A,$1E,$0E,$17,$18,$24,$19,$18,$17,$22,$24,$22,$24,$15,$18,$1C,$24,$13,$1E,$0E,$10,$18,$1C,$24,$24,$24,$24,$24,$24
+  ; Line 12: " de PC de la tortuga      "
+  .db $24,$0D,$0E,$24,$19,$0C,$24,$0D,$0E,$24,$15,$0A,$24,$1D,$18,$1B,$1D,$1E,$10,$0A,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
+  ; Line 13: " Manuelita que siempre    "
+  .db $24,$16,$0A,$17,$1E,$0E,$15,$12,$1D,$0A,$24,$1A,$1E,$0E,$24,$1C,$12,$0E,$16,$19,$1B,$0E,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
+  ; Line 14: " terminaban rompiendo     "
+  .db $24,$1D,$0E,$1B,$16,$12,$17,$0A,$0B,$0A,$17,$24,$1B,$18,$16,$19,$12,$0E,$17,$0D,$18,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
+  ; Line 15: " todo. Con arte y         "
+  .db $24,$1D,$18,$0D,$18,$2F,$24,$0C,$18,$17,$24,$0A,$1B,$1D,$0E,$24,$22,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
+  ; Line 16: " canciones compartimos lo "
+  .db $24,$0C,$0A,$17,$0C,$12,$18,$17,$0E,$1C,$24,$0C,$18,$16,$19,$0A,$1B,$1D,$12,$16,$18,$1C,$24,$15,$18,$24,$24,$24,$24,$24,$24,$24
+  ; Line 17: " que creimos la ultima era"
+  .db $24,$1A,$1E,$0E,$24,$0C,$1B,$0E,$12,$16,$18,$1C,$24,$15,$0A,$24,$1E,$15,$1D,$12,$16,$0A,$24,$0E,$1B,$0A,$24,$24,$24,$24,$24,$24
+  ; Line 18: " de la familia, pero hoy  "
+  .db $24,$0D,$0E,$24,$15,$0A,$24,$0F,$0A,$16,$12,$15,$12,$0A,$2D,$24,$19,$0E,$1B,$18,$24,$11,$18,$22,$24,$24,$24,$24,$24,$24,$24,$24
+  ; Line 19: " sabemos que esa historia "
+  .db $24,$1C,$0A,$0B,$0E,$16,$18,$1C,$24,$1A,$1E,$0E,$24,$0E,$1C,$0A,$24,$11,$12,$1C,$1D,$18,$1B,$12,$0A,$24,$24,$24,$24,$24,$24,$24
+  ; Line 20: " sigue creciendo,         "
+  .db $24,$1C,$12,$10,$1E,$0E,$24,$0C,$1B,$0E,$0C,$12,$0E,$17,$0D,$18,$2D,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
+  ; Line 21: " expandiendose mas que    "
+  .db $24,$0E,$21,$19,$0A,$17,$0D,$12,$0E,$17,$0D,$18,$1C,$0E,$24,$16,$0A,$1C,$24,$1A,$1E,$0E,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
+  ; Line 22: " nunca.                   "
+  .db $24,$17,$1E,$17,$0C,$0A,$2F,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
+  ; Line 23: "                          " (empty line)
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
+  ; Line 24: "                          " (empty line)
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
+  ; Line 25: " Te amamos.               "
+  .db $24,$1D,$0E,$24,$0A,$16,$0A,$16,$18,$1C,$2F,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
+  ; Line 26: " Tu familia.              "
+  .db $24,$1D,$1E,$24,$0F,$0A,$16,$12,$15,$12,$0A,$2F,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$FF
+  ; (end marker)
   
   
     
