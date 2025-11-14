@@ -218,83 +218,26 @@ LoadBackground:
   LDA #$00
   STA $2006             ; write the low byte of $2000 address
 
-  LDX #$00            ; start at pointer + 0
-  LDY #$00
-InitialOutsideLoop:
-InitialInsideLoop:
-  LDA #$24            ; load tile $24 for background
-  STA $2007           ; this runs 256 * 4 times
-  INY                 ; inside loop counter
-  CPY #$00
-  BNE InitialInsideLoop      ; run the inside loop 256 times before continuing down
-  INX
-  CPX #$04
-  BNE InitialOutsideLoop     ; run the outside loop 4 times before continuing down
+  ; Load background nametable (960 tiles + 64 attributes) from pilarbg1.nam
+  LDA #LOW(gameBackground)
+  STA pointerLo
+  LDA #HIGH(gameBackground)
+  STA pointerHi
 
-  ; Draw floor - 2 lines at bottom of screen
-  ; First draw the top line of floor (tile $48) at row 27
-  LDA $2002             ; read PPU status to reset the high/low latch
-  LDA #$23
-  STA $2006             ; write the high byte 
-  LDA #$60              ; write to $2360 (row 27, column 0)
-  STA $2006
+  LDX #$00            ; outer loop counter (4 pages)
+  LDY #$00            ; inner loop counter (256 bytes per page)
+LoadBgOutsideLoop:
+LoadBgInsideLoop:
+  LDA [pointerLo], y  ; copy one background byte from address in pointer plus Y
+  STA $2007           ; write to PPU
+  INY                 ; Y = Y + 1
+  BNE LoadBgInsideLoop      ; if Y != 0, keep looping (runs 256 times)
   
-  LDX #$00              ; counter for 32 tiles across
-DrawFloorTopLine:
-  LDA #$48              ; top floor tile
-  STA $2007
-  INX
-  CPX #$20              ; 32 tiles across (full width)
-  BNE DrawFloorTopLine
-  
-  ; Now draw the bottom line of floor (tile $78) at row 28
-  LDA #$78              ; bottom floor tile
-  LDX #$00              ; counter for 32 tiles across
-DrawFloorBottomLine:
-  STA $2007             ; write tile $78
-  INX
-  CPX #$20              ; 32 tiles across (full width)
-  BNE DrawFloorBottomLine
-
-  ; Draw center line (tile $26) - simplified approach
-  ; Draw a few tiles in the middle rows for visibility
-  LDA $2002             ; read PPU status to reset the high/low latch
-  LDA #$21              ; row 8
-  STA $2006
-  LDA #$10              ; column 16 (middle)
-  STA $2006
-  LDA #$26              ; center line tile
-  STA $2007
-  
-  LDA $2002             ; read PPU status to reset the high/low latch  
-  LDA #$21              ; row 12
-  STA $2006
-  LDA #$90              ; column 16 + (4*32)
-  STA $2006
-  LDA #$26              ; center line tile
-  STA $2007
-  
-  LDA $2002             ; read PPU status to reset the high/low latch
-  LDA #$22              ; row 16  
-  STA $2006
-  LDA #$10              ; column 16
-  STA $2006
-  LDA #$26              ; center line tile
-  STA $2007
-
-  ; Write attributes
-  LDA $2002             ; read PPU status to reset the high/low latch
-  LDA #$23
-  STA $2006             ; write the high byte of $23C0 address
-  LDA #$C0
-  STA $2006             ; write the low byte of $23C0 address
-  LDX #$00              ; start out at 0
-LoadAttributeLoop:
-  LDA #%00000000        ; load attribute data (palette 0 for all)
-  STA $2007             ; write to PPU
-  INX                   ; X = X + 1
-  CPX #$40              ; Compare X to hex $40, decimal 64 - copying 64 bytes
-  BNE LoadAttributeLoop
+  ; Y wrapped to 0, we've read 256 bytes
+  INC pointerHi       ; move to next page of data
+  INX                 ; increment outer counter
+  CPX #$04            ; have we done 4 pages? (4 * 256 = 1024 bytes)
+  BNE LoadBgOutsideLoop
   RTS
 
 InitializeGame:
@@ -366,15 +309,14 @@ InitializeGame:
   STA p2_facing        ; start Player 2 facing right (0)
 
 ;;;Set initial score values
+  ; Start both players with 0 points
   LDA #$00
   STA scoreOnes
   STA scoreTens
   STA scoreHundreds
-  STA heartCounter      ; start Player 1 heart counter at 0
-  STA score2Ones        ; Player 2 score
+  STA score2Ones       ; Player 2 score
   STA score2Tens
   STA score2Hundreds
-  STA heartCounter2     ; start Player 2 heart counter at 0
 
 
 ;;:Set starting game state
@@ -891,15 +833,13 @@ RestartGame:
   STA p2_anim_timer
   STA p2_facing
 
-  ; Reset scores
+  ; Reset scores to 0
   STA scoreOnes
   STA scoreTens
   STA scoreHundreds
-  STA heartCounter
   STA score2Ones
   STA score2Tens
   STA score2Hundreds
-  STA heartCounter2
 
   ; Set game state to PLAYING (not title screen)
   LDA #STATEPLAYING
@@ -1371,67 +1311,23 @@ CheckPlayer2ItemDone:
   RTS
   
 BadItemCollisionPlayer1:
-  ; Bad item (broken heart) for Player 1 - check heart counter first
-  LDA heartCounter
-  BEQ BadHeartDecrementScorePlayer1  ; if heart counter is 0, decrement Player 1 score
-  
-  ; Heart counter is not 0, just reset it to 0
-  LDA #$00
-  STA heartCounter      ; reset Player 1 heart counter to 0
-  JMP ItemCollisionDone
-
-BadHeartDecrementScorePlayer1:
-  ; Heart counter was already 0, decrement Player 1 main score
-  JSR DecrementScore    ; decrement Player 1 main score
+  ; Bad item (broken heart) for Player 1 - subtract 1 point
+  JSR DecrementScore
   JMP ItemCollisionDone
 
 BadItemCollisionPlayer2:
-  ; Bad item (broken heart) for Player 2 - check heart counter first
-  LDA heartCounter2
-  BEQ BadHeartDecrementScorePlayer2  ; if heart counter is 0, decrement Player 2 score
-  
-  ; Heart counter is not 0, just reset it to 0
-  LDA #$00
-  STA heartCounter2     ; reset Player 2 heart counter to 0
-  JMP ItemCollisionDone
-
-BadHeartDecrementScorePlayer2:
-  ; Heart counter was already 0, decrement Player 2 main score
-  JSR DecrementScore2   ; decrement Player 2 main score
+  ; Bad item (broken heart) for Player 2 - subtract 1 point
+  JSR DecrementScore2
   JMP ItemCollisionDone
   
 GoodItemCollisionPlayer1:
-  ; Good item (heart) for Player 1 - increment heart counter
-  LDA heartCounter
-  CLC
-  ADC #$01
-  STA heartCounter
-  
-  ; Check if heart counter reached 3
-  CMP #$03
-  BNE ItemCollisionDone ; if not 3, we're done
-  
-  ; Heart counter reached 3 - reset to 0 and increment main score
-  LDA #$00
-  STA heartCounter      ; reset heart counter to 0
-  JSR IncrementScore    ; add 1 to Player 1 main score
+  ; Good item (heart) for Player 1 - add 1 point
+  JSR IncrementScore
   JMP ItemCollisionDone
 
 GoodItemCollisionPlayer2:
-  ; Good item (heart) for Player 2 - increment heart counter
-  LDA heartCounter2
-  CLC
-  ADC #$01
-  STA heartCounter2
-  
-  ; Check if heart counter reached 3
-  CMP #$03
-  BNE ItemCollisionDone ; if not 3, we're done
-  
-  ; Heart counter reached 3 - reset to 0 and increment main score
-  LDA #$00
-  STA heartCounter2     ; reset heart counter to 0
-  JSR IncrementScore2   ; add 1 to Player 2 main score
+  ; Good item (heart) for Player 2 - add 1 point
+  JSR IncrementScore2
   JMP ItemCollisionDone
 
 CakeItemCollisionPlayer1:
@@ -1573,35 +1469,13 @@ CheckPlayer2Item2Done:
   RTS
 
 GoodItem2CollisionPlayer2:
-  ; Good item (heart) for Player 2 - increment heart counter
-  LDA heartCounter2
-  CLC
-  ADC #$01
-  STA heartCounter2
-  
-  ; Check if heart counter reached 3
-  CMP #$03
-  BNE Item2CollisionDone ; if not 3, we're done
-  
-  ; Heart counter reached 3 - reset to 0 and increment main score
-  LDA #$00
-  STA heartCounter2     ; reset heart counter to 0
-  JSR IncrementScore2   ; add 1 to Player 2 main score
+  ; Good item (heart) for Player 2 - add 1 point
+  JSR IncrementScore2
   JMP Item2CollisionDone
 
 BadItem2CollisionPlayer2:
-  ; Bad item (broken heart) for Player 2 - check heart counter first
-  LDA heartCounter2
-  BEQ BadHeart2DecrementScorePlayer2  ; if heart counter is 0, decrement Player 2 score
-  
-  ; Heart counter is not 0, just reset it to 0
-  LDA #$00
-  STA heartCounter2     ; reset Player 2 heart counter to 0
-  JMP Item2CollisionDone
-
-BadHeart2DecrementScorePlayer2:
-  ; Heart counter was already 0, decrement Player 2 main score
-  JSR DecrementScore2   ; decrement Player 2 main score
+  ; Bad item (broken heart) for Player 2 - subtract 1 point
+  JSR DecrementScore2
   JMP Item2CollisionDone
 
 CakeItem2CollisionPlayer2:
@@ -1738,9 +1612,10 @@ CheckPlayer1CakeCollision:
   BNE CakeCollisionDone  ; if Player 1 not at ground level, no collision
   
   ; Collision detected with Player 1!
+  ; Cake was moving left (thrown by Player 2)
   JSR DecrementScore    ; Player 1 loses a point
+  JSR IncrementScore2   ; Player 2 gains a point
   LDA #$00
-  STA heartCounter      ; reset Player 1 heart counter to 0
   STA cakeactive        ; destroy the cake
   RTS
 
@@ -1768,9 +1643,10 @@ CheckPlayer2CakeCollision:
   BNE CakeCollisionDone  ; if Player 2 not at ground level, no collision
   
   ; Collision detected with Player 2!
+  ; Cake was moving right (thrown by Player 1)
   JSR DecrementScore2   ; Player 2 loses a point
+  JSR IncrementScore    ; Player 1 gains a point
   LDA #$00
-  STA heartCounter2     ; reset Player 2 heart counter to 0
   STA cakeactive        ; destroy the cake
 
 CakeCollisionDone:
@@ -2160,7 +2036,15 @@ SetGoodItemTileLeft:
 SetItemTileLeft:
   STA $0221
   
-  LDA #$01              ; attributes (different palette)
+  ; Set palette based on item type (cake uses palette 3, others use palette 2)
+  LDA itemtype
+  CMP #$02              ; is it a cake?
+  BEQ SetCakePaletteLeft
+  LDA #$02              ; hearts use palette 2
+  JMP StorePaletteLeft
+SetCakePaletteLeft:
+  LDA #$03              ; cake uses palette 3
+StorePaletteLeft:
   STA $0222
   
   LDA itemx
@@ -2198,7 +2082,15 @@ SetGoodItemTileRight:
 SetItemTileRight:
   STA $0229
   
-  LDA #$02              ; attributes (different palette)
+  ; Set palette based on item type (cake uses palette 3, others use palette 2)
+  LDA item2type
+  CMP #$02              ; is it a cake?
+  BEQ SetCakePaletteRight
+  LDA #$02              ; hearts use palette 2
+  JMP StorePaletteRight
+SetCakePaletteRight:
+  LDA #$03              ; cake uses palette 3
+StorePaletteRight:
   STA $022A
   
   LDA item2x
@@ -2223,7 +2115,7 @@ UpdateCakeSprite:
   LDA #$00              ; cake tile
   STA $0225             ; sprite 9 tile
   
-  LDA #$02              ; attributes (palette 2)
+  LDA #$03              ; attributes (palette 3)
   STA $0226             ; sprite 9 attributes
   
   LDA cakex
@@ -2287,19 +2179,28 @@ DrawScore:
   ; Check if we're on title screen - if so, skip drawing score
   LDA gamestate
   CMP #STATETITLE
-  BEQ SkipDrawScore
+  BNE CheckSecretosScore
+  JMP SkipDrawScore
   
+CheckSecretosScore:
   ; Check if we're on secretos screen - if so, skip drawing score
   CMP #STATESECRETOS
-  BEQ SkipDrawScore
+  BNE CheckSecretMsgScore
+  JMP SkipDrawScore
   
+CheckSecretMsgScore:
   ; Check if we're on secret message screen - if so, skip drawing score
   CMP #STATESECRETMSG
-  BEQ SkipDrawScore
+  BNE CheckWinScore
+  JMP SkipDrawScore
   
+CheckWinScore:
   ; Check if we're in win screen state
   CMP #STATEWINSCREEN
-  BEQ DrawWinMessage
+  BNE DrawScoreNormal
+  JMP DrawWinMessage
+
+DrawScoreNormal:
   
   ; Draw Player 1 score at PPU $2020 (top left)
   LDA $2002
@@ -2315,16 +2216,6 @@ DrawScore:
   LDA scoreOnes      ; last digit
   STA $2007
   
-  ; Draw Player 1 heart counter at PPU $2028 (offset by 8 tiles)
-  LDA $2002
-  LDA #$20
-  STA $2006
-  LDA #$28
-  STA $2006          ; start drawing Player 1 heart counter at PPU $2028
-  
-  LDA heartCounter   ; get Player 1 heart counter value
-  STA $2007          ; draw heart counter to background
-  
   ; Draw Player 2 score at PPU $203C (top right)
   LDA $2002
   LDA #$20
@@ -2339,25 +2230,34 @@ DrawScore:
   LDA score2Ones     ; last digit
   STA $2007
   
-  ; Draw Player 2 heart counter at PPU $2034 (offset by -8 tiles from score)
+  ; Set attribute for score areas to use palette 3 (white)
+  ; Top-left corner (covers Player 1 score area) is at $23C0
   LDA $2002
-  LDA #$20
+  LDA #$23
   STA $2006
-  LDA #$34
-  STA $2006          ; start drawing Player 2 heart counter at PPU $2034
+  LDA #$C0
+  STA $2006
+  LDA #%11111111     ; all 4 quadrants use palette 3
+  STA $2007
   
-  LDA heartCounter2  ; get Player 2 heart counter value
-  STA $2007          ; draw heart counter to background
+  ; Top-right corner (covers Player 2 score area) is at $23C7
+  LDA $2002
+  LDA #$23
+  STA $2006
+  LDA #$C7
+  STA $2006
+  LDA #%11111111     ; all 4 quadrants use palette 3
+  STA $2007
   
 SkipDrawScore:
   RTS
 
 DrawWinMessage:
-  ; Clear the top area and draw winner message
+  ; Draw centered winner message at row 2, column 12 (centered)
   LDA $2002
   LDA #$20
   STA $2006
-  LDA #$40              ; middle of top row
+  LDA #$4C              ; row 2, column 12 = $204C
   STA $2006
   
   ; Check which player won
@@ -2380,9 +2280,9 @@ DrawWinMessage:
   STA $2007
   LDA #$1C              ; 'S' (tile $1C)
   STA $2007
-  LDA #$2B              ; '!' (tile $0A)
+  LDA #$2B              ; '!' (tile $2B)
   STA $2007
-  JMP DrawRestartMessage
+  JMP SetWinMessageWhite
 
 DrawPlayer1Wins:
   ; Player 1 wins message "P1 WINS!"
@@ -2400,19 +2300,38 @@ DrawPlayer1Wins:
   STA $2007
   LDA #$1C              ; 'S' (tile $1C)
   STA $2007
-  LDA #$2B              ; '!' (tile $0A)
+  LDA #$2B              ; '!' (tile $2B)
   STA $2007
 
+SetWinMessageWhite:
+  ; Set attribute for win message area to use palette 3 (white)
+  ; Row 2 is covered by attribute byte at $23C1 (second byte in attribute table)
+  LDA $2002
+  LDA #$23
+  STA $2006
+  LDA #$C1              ; attribute byte for row 2, columns 8-15
+  STA $2006
+  LDA #%11111111        ; all quadrants use palette 3
+  STA $2007
+  
+  LDA $2002
+  LDA #$23
+  STA $2006
+  LDA #$C2              ; attribute byte for row 2, columns 16-23
+  STA $2006
+  LDA #%11111111        ; all quadrants use palette 3
+  STA $2007
+  
 DrawRestartMessage:
   ; Just return - no "PRESS START" message needed
   RTS
 
 ClearWinMessage:
-  ; Clear the win message area by filling with spaces
+  ; Clear the win message area by filling with spaces (centered position)
   LDA $2002
   LDA #$20
   STA $2006
-  LDA #$40              ; start at middle of top row
+  LDA #$4C              ; row 2, column 12 (centered)
   STA $2006
   
   ; Clear 8 tiles for "P1 WINS!" message
@@ -3365,6 +3284,9 @@ SecretMessage1:
         
 ;;;;;;;;;;;;;;  
   
+gameBackground:
+  .incbin "pilarbg1.nam"
+
 titleScreen:
   .incbin "pilartitle.nam"
   
@@ -3376,8 +3298,8 @@ titlepalette:
   .db $0F,$20,$10,$0F,  $0F,$21,$20,$31,  $0F,$15,$20,$26,  $0F,$00,$10,$30   ;;title sprite palette (same as bg)
 
 palette:
-  .db $22,$29,$1A,$0F,  $22,$36,$17,$0F,  $22,$30,$21,$0F,  $22,$27,$17,$0F   ;;background palette
-  .db $21,$30,$26,$16,  $21,$0D,$26,$30,  $21,$1C,$15,$14,  $21,$02,$38,$3C   ;;sprite palette
+  .db $22,$29,$1A,$0F,  $22,$36,$17,$0F,  $22,$30,$21,$0F,  $22,$30,$30,$0F   ;;background palette
+  .db $21,$30,$36,$16,  $21,$0D,$36,$30,  $21,$0F,$20,$15,  $21,$30,$36,$15   ;;sprite palette
 
 sprites:
      ;vert tile attr horiz
