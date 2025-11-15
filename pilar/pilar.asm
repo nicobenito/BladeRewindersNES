@@ -94,15 +94,18 @@ secret_msg_screen_pos_lo .rs 1  ; current screen position for writing (low byte)
 secret_msg_screen_pos_hi .rs 1  ; current screen position for writing (high byte)
 secret_msg_timer .rs 1  ; timer for character writing speed
 secret_msg_draw_flag .rs 1  ; 1=need to write next character during NMI, 0=no write needed
+loading_timer    .rs 1  ; timer for loading screen (counts frames, 600 frames = 10 seconds)
+loading_timer_hi .rs 1  ; high byte of loading timer (16-bit counter)
 
 
 ;; DECLARE SOME CONSTANTS HERE
 STATETITLE     = $00  ; displaying title screen
-STATEPLAYING   = $01  ; move paddles/ball, check for collisions
-STATEGAMEOVER  = $02  ; displaying game over screen
-STATEWINSCREEN = $03  ; displaying winner screen
-STATESECRETOS  = $04  ; displaying secretos screen
-STATESECRETMSG = $05  ; displaying secret message
+STATELOADING   = $01  ; displaying loading/instructions screen
+STATEPLAYING   = $02  ; move paddles/ball, check for collisions
+STATEGAMEOVER  = $03  ; displaying game over screen
+STATEWINSCREEN = $04  ; displaying winner screen
+STATESECRETOS  = $05  ; displaying secretos screen
+STATESECRETMSG = $06  ; displaying secret message
   
 RIGHTWALL      = $F4  ; when ball reaches one of these, do something
 TOPWALL        = $20
@@ -190,6 +193,54 @@ LoadTitlePalettesLoop:
   INX                   ; X = X + 1
   CPX #$20              ; Compare X to hex $20, decimal 32 - copying 32 bytes
   BNE LoadTitlePalettesLoop
+  RTS
+
+LoadLoadingPalettes:
+  ; Load special palettes for loading screen (black background, white text)
+  LDA $2002             ; read PPU status to reset the high/low latch
+  LDA #$3F
+  STA $2006             ; write the high byte of $3F00 address
+  LDA #$00
+  STA $2006             ; write the low byte of $3F00 address
+  
+  ; Background palette 0: all black
+  LDA #$0F              ; black
+  STA $2007
+  LDA #$0F              ; black
+  STA $2007
+  LDA #$0F              ; black
+  STA $2007
+  LDA #$0F              ; black
+  STA $2007
+  
+  ; Background palettes 1-2: not used, set to black
+  LDX #$00
+LoadingBgPalLoop:
+  LDA #$0F              ; black
+  STA $2007
+  INX
+  CPX #$08              ; 8 more bytes (2 palettes * 4 colors)
+  BNE LoadingBgPalLoop
+  
+  ; Background palette 3: white text
+  LDA #$0F              ; black background
+  STA $2007
+  LDA #$30              ; white
+  STA $2007
+  LDA #$30              ; white
+  STA $2007
+  LDA #$30              ; white
+  STA $2007
+  
+  ; Sprite palettes (keep same as game)
+  LDX #$00
+LoadingSpritePalLoop:
+  LDA palette+16, x     ; load sprite palettes from game palette
+  STA $2007
+  INX
+  CPX #$10              ; 16 bytes (4 sprite palettes)
+  BNE LoadingSpritePalLoop
+  
   RTS
 
 LoadPalettes:
@@ -390,8 +441,13 @@ SkipSecretMsgDraw:
 GameEngine:  
   LDA gamestate
   CMP #STATETITLE
-  BNE CheckSecretos
+  BNE CheckLoading
   JMP EngineTitle    ;;game is displaying title screen
+  
+CheckLoading:
+  CMP #STATELOADING
+  BNE CheckSecretos
+  JMP EngineLoading  ;;game is displaying loading/instructions screen
   
 CheckSecretos:
   CMP #STATESECRETOS
@@ -541,6 +597,7 @@ WaitVBlankSecretos:
   JMP GameEngineDone
 
 StartGameFromTitle:
+  ; Transition to loading screen
   ; Turn screen off
   LDA #%00000000
   STA $2001
@@ -552,11 +609,94 @@ WaitVBlankTransition:
   BIT $2002
   BPL WaitVBlankTransition
   
-  ; Switch to gameplay CHR bank (bank 1)
+  ; Switch to gameplay CHR bank (bank 1) for loading screen
   LDA #$01          ; put bank 1 (gameplay CHR) into A
   JSR Bankswitch    ; switch to gameplay graphics
   
-  ; Load gameplay palettes
+  ; Load title screen palettes (which have black background)
+  JSR LoadTitlePalettes
+  
+  ; Now overwrite sprite palettes with game sprite palettes for items
+  LDA $2002             ; reset PPU latch
+  LDA #$3F
+  STA $2006
+  LDA #$10              ; sprite palette start at $3F10
+  STA $2006
+  
+  LDX #$00
+LoadingSpritePalettes:
+  LDA palette+16, x     ; load game sprite palettes
+  STA $2007
+  INX
+  CPX #$10              ; 16 bytes (4 sprite palettes)
+  BNE LoadingSpritePalettes
+  
+  ; Load loading screen (black background with instructions)
+  JSR LoadLoadingScreen
+  
+  ; Initialize loading timer (600 frames = 10 seconds at 60 FPS)
+  LDA #LOW(600)
+  STA loading_timer
+  LDA #HIGH(600)
+  STA loading_timer_hi
+  
+  ; Set game state to loading
+  LDA #STATELOADING
+  STA gamestate
+  
+  ; Turn screen back on
+  LDA #%10010000        ; enable NMI, sprites from Pattern Table 0, background from Pattern Table 1
+  STA $2000
+  LDA #%00011110        ; enable sprites, enable background, no clipping on left side
+  STA $2001
+  
+  JMP GameEngineDone
+
+;;;;;;;;; 
+
+EngineLoading:
+  ; Decrement loading timer (16-bit)
+  LDA loading_timer
+  BNE DecrementLoadingLow
+  LDA loading_timer_hi
+  BEQ LoadingTimerExpired  ; both bytes are 0, timer expired
+  DEC loading_timer_hi
+  LDA #$FF
+  STA loading_timer
+  JMP CheckLoadingStart
+
+DecrementLoadingLow:
+  DEC loading_timer
+
+CheckLoadingStart:
+  ; Check if START button is pressed
+  LDA buttons1
+  AND #%00010000        ; START button
+  BEQ LoadingEngineDone  ; not pressed, stay on loading screen
+  
+  ; START pressed, transition to game
+  JMP StartGameFromLoading
+
+LoadingTimerExpired:
+  ; Timer reached 0, automatically start game
+  JMP StartGameFromLoading
+
+LoadingEngineDone:
+  JMP GameEngineDone
+
+StartGameFromLoading:
+  ; Turn screen off
+  LDA #%00000000
+  STA $2001
+  STA $2000             ; also turn off NMI
+  
+  ; Wait for vblank
+  LDA $2002
+WaitVBlankLoadingToGame:
+  BIT $2002
+  BPL WaitVBlankLoadingToGame
+  
+  ; Load game palettes
   JSR LoadPalettes
   
   ; Load game background
@@ -567,9 +707,9 @@ WaitVBlankTransition:
   STA gamestate
   
   ; Turn screen back on
-  LDA #%10010000        ; enable NMI, sprites from Pattern Table 0, background from Pattern Table 1
+  LDA #%10010000
   STA $2000
-  LDA #%00011110        ; enable sprites, enable background, no clipping on left side
+  LDA #%00011110
   STA $2001
   
   JMP GameEngineDone
@@ -1991,6 +2131,10 @@ UpdateSprites:
   CMP #STATETITLE
   BEQ JumpToDrawMenuCursor
   
+  ; Check if we're on loading screen - if so, show loading items
+  CMP #STATELOADING
+  BEQ DrawLoadingSprites
+  
   ; Check if we're on secretos screen - if so, hide all sprites
   CMP #STATESECRETOS
   BEQ JumpToHideAllSprites
@@ -2011,6 +2155,52 @@ JumpToDrawMenuCursor:
 
 JumpToHideAllSprites:
   JMP HideAllSprites
+
+DrawLoadingSprites:
+  ; Draw the three item sprites for the loading screen
+  ; Sprite 0: Heart at row 8, column 15 (Y=$40, X=$78)
+  LDA #$40              ; Y position (row 8 * 8 = 64 = $40)
+  STA $0200
+  LDA #$01              ; heart tile
+  STA $0201
+  LDA #$02              ; palette 2 (same as in-game)
+  STA $0202
+  LDA #$78              ; X position (column 15 * 8 = 120 = $78)
+  STA $0203
+  
+  ; Sprite 1: Broken heart at row 14, column 15 (Y=$70, X=$78)
+  LDA #$70              ; Y position (row 14 * 8 = 112 = $70)
+  STA $0204
+  LDA #$02              ; broken heart tile
+  STA $0205
+  LDA #$02              ; palette 2
+  STA $0206
+  LDA #$78              ; X position
+  STA $0207
+  
+  ; Sprite 2: Cake at row 20, column 15 (Y=$A0, X=$78)
+  LDA #$A0              ; Y position (row 20 * 8 = 160 = $A0)
+  STA $0208
+  LDA #$00              ; cake tile
+  STA $0209
+  LDA #$03              ; palette 3 (cake uses palette 3)
+  STA $020A
+  LDA #$78              ; X position
+  STA $020B
+  
+  ; Hide all other sprites (sprites 3-9)
+  LDX #$0C              ; start at sprite 3 (offset 12)
+HideLoadingSpritesLoop:
+  LDA #$FF              ; Y position off screen
+  STA $0200, X          ; set Y position
+  INX
+  INX
+  INX
+  INX
+  CPX #$28              ; 40 bytes = 10 sprites * 4 bytes
+  BNE HideLoadingSpritesLoop
+  
+  JMP UpdateSpritesDone
 
 ContinueUpdateSprites:
   ; Update falling item sprite (sprite 8) - Left Zone
@@ -2179,6 +2369,12 @@ DrawScore:
   ; Check if we're on title screen - if so, skip drawing score
   LDA gamestate
   CMP #STATETITLE
+  BNE CheckLoadingScore
+  JMP SkipDrawScore
+  
+CheckLoadingScore:
+  ; Check if we're on loading screen - if so, skip drawing score
+  CMP #STATELOADING
   BNE CheckSecretosScore
   JMP SkipDrawScore
   
@@ -2253,11 +2449,11 @@ SkipDrawScore:
   RTS
 
 DrawWinMessage:
-  ; Draw centered winner message at row 2, column 12 (centered)
+  ; Draw centered winner message at row 2, column 8 (centered)
   LDA $2002
   LDA #$20
   STA $2006
-  LDA #$4C              ; row 2, column 12 = $204C
+  LDA #$48              ; row 2, column 8 = $2048
   STA $2006
   
   ; Check which player won
@@ -2265,42 +2461,74 @@ DrawWinMessage:
   CMP #$01
   BEQ DrawPlayer1Wins
   
-  ; Player 2 wins message "P2 WINS!"
-  LDA #$19              ; 'P' (tile $19)
+  ; Player 2 wins message "Ganador Player 2"
+  LDA #$10              ; 'G' (tile $10)
   STA $2007
-  LDA #$02              ; '2' (tile $02)  
+  LDA #$0A              ; 'a' (tile $0A)
+  STA $2007
+  LDA #$17              ; 'n' (tile $17)
+  STA $2007
+  LDA #$0A              ; 'a' (tile $0A)
+  STA $2007
+  LDA #$0D              ; 'd' (tile $0D)
+  STA $2007
+  LDA #$18              ; 'o' (tile $18)
+  STA $2007
+  LDA #$1B              ; 'r' (tile $1B)
   STA $2007
   LDA #$24              ; space (tile $24)
   STA $2007
-  LDA #$20              ; 'W' (tile $20)
+  LDA #$19              ; 'P' (tile $19)
   STA $2007
-  LDA #$12              ; 'I' (tile $12)
+  LDA #$15              ; 'l' (tile $15)
   STA $2007
-  LDA #$17              ; 'N' (tile $17)
+  LDA #$0A              ; 'a' (tile $0A)
   STA $2007
-  LDA #$1C              ; 'S' (tile $1C)
+  LDA #$22              ; 'y' (tile $22)
   STA $2007
-  LDA #$2B              ; '!' (tile $2B)
+  LDA #$0E              ; 'e' (tile $0E)
+  STA $2007
+  LDA #$1B              ; 'r' (tile $1B)
+  STA $2007
+  LDA #$24              ; space (tile $24)
+  STA $2007
+  LDA #$02              ; '2' (tile $02)
   STA $2007
   JMP SetWinMessageWhite
 
 DrawPlayer1Wins:
-  ; Player 1 wins message "P1 WINS!"
-  LDA #$19              ; 'P' (tile $19)
+  ; Player 1 wins message "Ganador Player 1"
+  LDA #$10              ; 'G' (tile $10)
   STA $2007
-  LDA #$01              ; '1' (tile $01)
+  LDA #$0A              ; 'a' (tile $0A)
+  STA $2007
+  LDA #$17              ; 'n' (tile $17)
+  STA $2007
+  LDA #$0A              ; 'a' (tile $0A)
+  STA $2007
+  LDA #$0D              ; 'd' (tile $0D)
+  STA $2007
+  LDA #$18              ; 'o' (tile $18)
+  STA $2007
+  LDA #$1B              ; 'r' (tile $1B)
   STA $2007
   LDA #$24              ; space (tile $24)
   STA $2007
-  LDA #$20              ; 'W' (tile $20)
+  LDA #$19              ; 'P' (tile $19)
   STA $2007
-  LDA #$12              ; 'I' (tile $12)
+  LDA #$15              ; 'l' (tile $15)
   STA $2007
-  LDA #$17              ; 'N' (tile $17)
+  LDA #$0A              ; 'a' (tile $0A)
   STA $2007
-  LDA #$1C              ; 'S' (tile $1C)
+  LDA #$22              ; 'y' (tile $22)
   STA $2007
-  LDA #$2B              ; '!' (tile $2B)
+  LDA #$0E              ; 'e' (tile $0E)
+  STA $2007
+  LDA #$1B              ; 'r' (tile $1B)
+  STA $2007
+  LDA #$24              ; space (tile $24)
+  STA $2007
+  LDA #$01              ; '1' (tile $01)
   STA $2007
 
 SetWinMessageWhite:
@@ -2331,31 +2559,16 @@ ClearWinMessage:
   LDA $2002
   LDA #$20
   STA $2006
-  LDA #$4C              ; row 2, column 12 (centered)
+  LDA #$48              ; row 2, column 8 = $2048
   STA $2006
   
-  ; Clear 8 tiles for "P1 WINS!" message
-  LDX #$08
-ClearWinLoop1:
+  ; Clear 16 tiles for "Ganador Player X" message
+  LDX #$10
+ClearWinLoop:
   LDA #$24              ; space tile
   STA $2007
   DEX
-  BNE ClearWinLoop1
-  
-  ; Clear the "PRESS START" message area
-  LDA $2002
-  LDA #$20
-  STA $2006
-  LDA #$80              ; next row
-  STA $2006
-  
-  ; Clear 11 tiles for "PRESS START" message
-  LDX #$0B
-ClearWinLoop2:
-  LDA #$24              ; space tile
-  STA $2007
-  DEX
-  BNE ClearWinLoop2
+  BNE ClearWinLoop
   
   RTS
  
@@ -2664,6 +2877,147 @@ SecretosAttributeLoop:
   INX
   CPX #$40              ; 64 bytes ($40 in hex)
   BNE SecretosAttributeLoop
+  
+  RTS
+
+LoadLoadingScreen:
+  ; Fill entire screen with spaces (tile $24)
+  ; The background will be black due to palette 0
+  LDA $2002             ; read PPU status to reset the high/low latch
+  LDA #$20
+  STA $2006             ; write the high byte of $2000 address
+  LDA #$00
+  STA $2006             ; write the low byte of $2000 address
+
+  LDX #$00              ; outer loop counter (4 pages)
+  LDY #$00              ; inner loop counter (256 bytes per page)
+LoadingOutsideLoop:
+LoadingInsideLoop:
+  LDA #$24              ; tile $24 (space - will show background color)
+  STA $2007             ; write to PPU
+  INY                   ; increment inner counter
+  CPY #$00
+  BNE LoadingInsideLoop ; run 256 times
+  
+  INX                   ; increment outer counter
+  CPX #$04
+  BNE LoadingOutsideLoop ; run 4 times (4 * 256 = 1024 tiles)
+  
+  ; Set all attributes to palette 0 (black background from title palette)
+  LDA $2002             ; reset PPU latch
+  LDA #$23
+  STA $2006             ; high byte of $23C0
+  LDA #$C0
+  STA $2006             ; low byte of $23C0
+  
+  LDX #$00              ; counter for 64 bytes
+LoadingAttributeLoop:
+  LDA #%00000000        ; all tiles use palette 0
+  STA $2007
+  INX
+  CPX #$40              ; 64 bytes ($40 in hex)
+  BNE LoadingAttributeLoop
+  
+  ; Now draw the text messages (items will be sprites)
+  ; "Suma 1 punto" at row 10, column 10 = $214A
+  LDA $2002
+  LDA #$21
+  STA $2006
+  LDA #$4A
+  STA $2006
+  ; S=1C, u=1E, m=16, a=0A, space=24, 1=01, space=24, p=19, u=1E, n=17, t=1D, o=18
+  LDA #$1C              ; S
+  STA $2007
+  LDA #$1E              ; u
+  STA $2007
+  LDA #$16              ; m
+  STA $2007
+  LDA #$0A              ; a
+  STA $2007
+  LDA #$24              ; space
+  STA $2007
+  LDA #$01              ; 1
+  STA $2007
+  LDA #$24              ; space
+  STA $2007
+  LDA #$19              ; p
+  STA $2007
+  LDA #$1E              ; u
+  STA $2007
+  LDA #$17              ; n
+  STA $2007
+  LDA #$1D              ; t
+  STA $2007
+  LDA #$18              ; o
+  STA $2007
+  
+  ; Draw "Resta 1 punto" at row 16, column 9 = $2209
+  LDA $2002
+  LDA #$22
+  STA $2006
+  LDA #$09
+  STA $2006
+  ; R=1B, e=0E, s=1C, t=1D, a=0A, space=24, 1=01, space=24, p=19, u=1E, n=17, t=1D, o=18
+  LDA #$1B              ; R
+  STA $2007
+  LDA #$0E              ; e
+  STA $2007
+  LDA #$1C              ; s
+  STA $2007
+  LDA #$1D              ; t
+  STA $2007
+  LDA #$0A              ; a
+  STA $2007
+  LDA #$24              ; space
+  STA $2007
+  LDA #$01              ; 1
+  STA $2007
+  LDA #$24              ; space
+  STA $2007
+  LDA #$19              ; p
+  STA $2007
+  LDA #$1E              ; u
+  STA $2007
+  LDA #$17              ; n
+  STA $2007
+  LDA #$1D              ; t
+  STA $2007
+  LDA #$18              ; o
+  STA $2007
+  
+  ; Draw "Roba un punto" at row 22, column 9 = $22C9
+  LDA $2002
+  LDA #$22
+  STA $2006
+  LDA #$C9
+  STA $2006
+  ; R=1B, o=18, b=0B, a=0A, space=24, u=1E, n=17, space=24, p=19, u=1E, n=17, t=1D, o=18
+  LDA #$1B              ; R
+  STA $2007
+  LDA #$18              ; o
+  STA $2007
+  LDA #$0B              ; b
+  STA $2007
+  LDA #$0A              ; a
+  STA $2007
+  LDA #$24              ; space
+  STA $2007
+  LDA #$1E              ; u
+  STA $2007
+  LDA #$17              ; n
+  STA $2007
+  LDA #$24              ; space
+  STA $2007
+  LDA #$19              ; p
+  STA $2007
+  LDA #$1E              ; u
+  STA $2007
+  LDA #$17              ; n
+  STA $2007
+  LDA #$1D              ; t
+  STA $2007
+  LDA #$18              ; o
+  STA $2007
   
   RTS
 
