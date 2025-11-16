@@ -1,5 +1,5 @@
   .inesprg 1   ; 1x 16KB PRG code
-  .ineschr 2   ; 2x  8KB CHR data (for title and gameplay graphics)
+  .ineschr 3   ; 3x  8KB CHR data (for title, gameplay, and secret image graphics)
   .inesmap 3   ; mapper 3 = CNROM, supports CHR-ROM bank switching
   .inesmir 1   ; background mirroring
   
@@ -106,6 +106,7 @@ STATEGAMEOVER  = $03  ; displaying game over screen
 STATEWINSCREEN = $04  ; displaying winner screen
 STATESECRETOS  = $05  ; displaying secretos screen
 STATESECRETMSG = $06  ; displaying secret message
+STATESECRETIMG = $07  ; displaying secret image
   
 RIGHTWALL      = $F4  ; when ball reaches one of these, do something
 TOPWALL        = $20
@@ -241,6 +242,22 @@ LoadingSpritePalLoop:
   CPX #$10              ; 16 bytes (4 sprite palettes)
   BNE LoadingSpritePalLoop
   
+  RTS
+
+LoadSecretImagePalette:
+  ; Load custom palette for secret image
+  LDA $2002             ; read PPU status to reset the high/low latch
+  LDA #$3F
+  STA $2006             ; write the high byte of $3F00 address
+  LDA #$00
+  STA $2006             ; write the low byte of $3F00 address
+  LDX #$00              ; start out at 0
+LoadSecretImagePaletteLoop:
+  LDA secretimagepalette, x   ; load data from secret image palette
+  STA $2007             ; write to PPU
+  INX                   ; X = X + 1
+  CPX #$20              ; Compare X to hex $20, decimal 32 - copying 32 bytes
+  BNE LoadSecretImagePaletteLoop
   RTS
 
 LoadPalettes:
@@ -424,8 +441,22 @@ SkipSecretDraw:
 SkipSecretMsgDraw:
 
   ;;This is the PPU clean up section, so rendering the next frame starts properly.
+  ; Check if we're displaying secret image - use pattern table 0 for background
+  LDA gamestate
+  CMP #STATESECRETIMG
+  BEQ SetupSecretImagePPU
+  
+  ; Normal PPU setup (pattern table 1 for background)
   LDA #%10010000   ; enable NMI, sprites from Pattern Table 0, background from Pattern Table 1
   STA $2000
+  JMP ContinuePPUSetup
+  
+SetupSecretImagePPU:
+  ; Secret image PPU setup (pattern table 0 for background)
+  LDA #%10000000   ; enable NMI, sprites from Pattern Table 0, background from Pattern Table 0
+  STA $2000
+  
+ContinuePPUSetup:
   LDA #%00011110   ; enable sprites, enable background, no clipping on left side
   STA $2001
   LDA #$00        ;;tell the ppu there is no background scrolling
@@ -456,8 +487,13 @@ CheckSecretos:
 
 CheckSecretMsg:
   CMP #STATESECRETMSG
-  BNE CheckGameOver
+  BNE CheckSecretImg
   JMP EngineSecretMessage  ;;game is displaying secret message
+
+CheckSecretImg:
+  CMP #STATESECRETIMG
+  BNE CheckGameOver
+  JMP EngineSecretImage  ;;game is displaying secret image
     
 CheckGameOver:
   CMP #STATEGAMEOVER
@@ -563,7 +599,7 @@ WaitVBlankSecretos:
   BIT $2002
   BPL WaitVBlankSecretos
   
-  ; Load black screen
+  ; Load black screen (already on correct CHR bank from title)
   JSR LoadSecretosScreen
   
   ; Initialize secretos variables
@@ -871,6 +907,60 @@ CheckSecretMsgButtons:
 
 SecretMsgDone:
   JMP GameEngineDone
+
+EngineSecretImage:
+  ; Display secret image, wait for B button to return to title
+  ; Check for B button to return to title screen
+  LDA buttons1
+  AND #%01000000      ; B button
+  BEQ SecretImgDone
+  JMP ReturnToTitleFromSecretImage
+
+SecretImgDone:
+  JMP GameEngineDone
+
+ReturnToTitleFromSecretImage:
+  ; Return to title screen from secret image
+  LDA #%00000000
+  STA $2001
+  STA $2000
+  
+  ; Wait for vblank
+  LDA $2002
+WaitVBlankReturnFromImage:
+  BIT $2002
+  BPL WaitVBlankReturnFromImage
+  
+  ; Switch back to title CHR bank (bank 0)
+  LDA #$00
+  JSR Bankswitch        ; use the bankswitch subroutine
+  
+  ; Load title palettes and screen
+  JSR LoadTitlePalettes
+  JSR LoadTitleScreen
+  
+  ; Reset to title state
+  LDA #STATETITLE
+  STA gamestate
+  
+  ; Reset menu selection
+  LDA #$00
+  STA menu_selection
+  LDA #$B0
+  STA menu_cursor_y
+  LDA #$40
+  STA menu_cursor_x
+  
+  ; Set input timer to prevent immediate re-trigger
+  LDA #120
+  STA input_timer
+  
+  ; Turn screen back on
+  LDA #%10010000
+  STA $2000
+  LDA #%00011110
+  STA $2001
+  RTS
 
 ReturnToTitleFromSecret:
   ; Return to title screen
@@ -2143,6 +2233,10 @@ UpdateSprites:
   CMP #STATESECRETMSG
   BEQ JumpToHideAllSprites
   
+  ; Check if we're on secret image screen - if so, hide all sprites
+  CMP #STATESECRETIMG
+  BEQ JumpToHideAllSprites
+  
   ; Update Player 1 (16x16 character using sprites 0-3)
   JSR UpdatePlayer1Sprites
   
@@ -2387,6 +2481,12 @@ CheckSecretosScore:
 CheckSecretMsgScore:
   ; Check if we're on secret message screen - if so, skip drawing score
   CMP #STATESECRETMSG
+  BNE CheckSecretImgScore
+  JMP SkipDrawScore
+
+CheckSecretImgScore:
+  ; Check if we're on secret image screen - if so, skip drawing score
+  CMP #STATESECRETIMG
   BNE CheckWinScore
   JMP SkipDrawScore
   
@@ -3269,21 +3369,39 @@ CheckCode2:
   ; Check for code 1998 (secret message 1)
   LDA secret_digit1
   CMP #$01
-  BNE CheckCodeError
+  BNE CheckCode3
   LDA secret_digit2
   CMP #$09
-  BNE CheckCodeError
+  BNE CheckCode3
   LDA secret_digit3
   CMP #$09
-  BNE CheckCodeError
+  BNE CheckCode3
   LDA secret_digit4
   CMP #$08
-  BNE CheckCodeError
+  BNE CheckCode3
   
   ; Success! Code 1998 found
   LDA #$01              ; message index 1
   STA secret_msg_index
   JMP ShowSecretMessage
+
+CheckCode3:
+  ; Check for code 1111 (secret image)
+  LDA secret_digit1
+  CMP #$01
+  BNE CheckCodeError
+  LDA secret_digit2
+  CMP #$01
+  BNE CheckCodeError
+  LDA secret_digit3
+  CMP #$01
+  BNE CheckCodeError
+  LDA secret_digit4
+  CMP #$01
+  BNE CheckCodeError
+  
+  ; Success! Code 1111 found - show image
+  JMP ShowSecretImage
 
 CheckCodeError:
   ; No match found, show error
@@ -3341,6 +3459,64 @@ ClearOldUILoop:
   
   ; Turn screen back on
   LDA #%10010000
+  STA $2000
+  LDA #%00011110
+  STA $2001
+  RTS
+
+ShowSecretImage:
+  ; Display the secret image (code 1111)
+  ; Turn screen off
+  LDA #%00000000
+  STA $2001
+  STA $2000
+  
+  ; Wait for vblank
+  LDA $2002
+WaitVBlankForImage:
+  BIT $2002
+  BPL WaitVBlankForImage
+  
+  ; Switch to CHR bank 2 (pilarart2.chr)
+  LDA #$02
+  JSR Bankswitch        ; use the bankswitch subroutine
+  
+  ; Load custom palette for secret image
+  JSR LoadSecretImagePalette
+  
+  ; Load the image nametable + attributes (1024 bytes)
+  LDA #LOW(SecretImageData)
+  STA pointerLo
+  LDA #HIGH(SecretImageData)
+  STA pointerHi
+  
+  ; Set PPU address to $2000 (start of nametable)
+  LDA $2002
+  LDA #$20
+  STA $2006
+  LDA #$00
+  STA $2006
+  
+  ; Load 1024 bytes (nametable + attributes)
+  LDX #$00              ; outer loop (4 pages)
+  LDY #$00              ; inner loop (256 bytes per page)
+LoadImageLoop:
+  LDA [pointerLo], y
+  STA $2007
+  INY
+  BNE LoadImageLoop
+  INC pointerHi
+  INX
+  CPX #$04              ; 4 * 256 = 1024 bytes
+  BNE LoadImageLoop
+  
+  ; Set state to secret image
+  LDA #STATESECRETIMG
+  STA gamestate
+  
+  ; Turn screen back on
+  ; Use pattern table 0 ($0000-$0FFF) for background
+  LDA #%10000000        ; NMI on, pattern table 0 for background
   STA $2000
   LDA #%00011110
   STA $2001
@@ -3647,6 +3823,11 @@ titleScreen:
   
   .bank 1
   .org $E000
+
+SecretImageData:
+  ; Secret image nametable + attributes (1024 bytes)
+  .incbin "pilarart2.nam"
+
 titlepalette:
   .db $0F,$20,$10,$0F,  $0F,$21,$20,$31,  $0F,$15,$20,$26,  $0F,$00,$10,$30   ;;title background palette
   .db $0F,$20,$10,$0F,  $0F,$21,$20,$31,  $0F,$15,$20,$26,  $0F,$00,$10,$30   ;;title sprite palette (same as bg)
@@ -3654,6 +3835,10 @@ titlepalette:
 palette:
   .db $22,$29,$1A,$0F,  $22,$36,$17,$0F,  $22,$30,$21,$0F,  $22,$30,$30,$0F   ;;background palette
   .db $21,$30,$36,$16,  $21,$0D,$36,$30,  $21,$0F,$20,$15,  $21,$30,$36,$15   ;;sprite palette
+
+secretimagepalette:
+  .db $05,$37,$26,$03,  $05,$27,$26,$03,  $05,$27,$26,$03,  $05,$27,$26,$03   ;;secret image background palette
+  .db $05,$37,$26,$03,  $05,$27,$26,$03,  $05,$27,$26,$03,  $05,$27,$26,$03   ;;secret image sprite palette (same)
 
 sprites:
      ;vert tile attr horiz
@@ -3682,3 +3867,7 @@ sprites:
   .bank 3
   .org $0000
   .incbin "pilar.chr"        ; gameplay graphics (8KB CHR bank 1)
+
+  .bank 4
+  .org $0000
+  .incbin "pilarart2.chr"    ; secret image graphics (8KB CHR bank 2)
