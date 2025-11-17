@@ -1180,11 +1180,16 @@ MoveBall1Left:
   SBC ballspeedx        ; ballx position = ballx - ballspeedx
   STA ballx
   
+  ; Player 1 can't go past column 1 (x = $08)
+  ; Check if wrapped around (x > $F0 means it went negative)
   LDA ballx
-  CMP #LEFTWALL
-  BCS MoveBall1LeftDone  ; if ball x > left wall, still on screen
-  LDA #LEFTWALL
-  STA ballx             ; clamp to left wall
+  CMP #$F0
+  BCS Player1WrappedLeft  ; if x >= $F0, wrapped around
+  CMP #$08
+  BCS MoveBall1LeftDone  ; if ball x >= $08, still in bounds
+Player1WrappedLeft:
+  LDA #$08
+  STA ballx             ; clamp to column 1
 MoveBall1LeftDone:
 
 MoveBall1Right:
@@ -1197,12 +1202,12 @@ MoveBall1Right:
   ADC ballspeedx        ; ballx position = ballx + ballspeedx
   STA ballx
 
-  ; Player 1 can't go past center (x = $80)
+  ; Player 1 can't go past column 14 (x = $70 = 112 pixels = 14 tiles * 8)
   LDA ballx
-  CMP #$80
-  BCC MoveBall1RightDone ; if ball x < center, still on left side
-  LDA #$7F
-  STA ballx             ; clamp to just left of center
+  CMP #$70
+  BCC MoveBall1RightDone ; if ball x < $70, still in bounds
+  LDA #$70
+  STA ballx             ; clamp to column 14
 MoveBall1RightDone:
 
 HandlePlayer2Movement:
@@ -1221,12 +1226,12 @@ MoveBall2Left:
   SBC ballspeedx        ; ball2x position = ball2x - ballspeedx
   STA ball2x
   
-  ; Player 2 can't go past center (x = $80)
+  ; Player 2 can't go past column 17 (x = $88 = 136 pixels = 17 tiles * 8)
   LDA ball2x
-  CMP #$80
-  BCS MoveBall2LeftDone  ; if ball x >= center, still on right side
-  LDA #$81
-  STA ball2x             ; clamp to just right of center
+  CMP #$88
+  BCS MoveBall2LeftDone  ; if ball x >= $88, still in bounds
+  LDA #$88
+  STA ball2x             ; clamp to column 17
 MoveBall2LeftDone:
 
 MoveBall2Right:
@@ -1239,11 +1244,12 @@ MoveBall2Right:
   ADC ballspeedx        ; ball2x position = ball2x + ballspeedx
   STA ball2x
 
+  ; Player 2 can't go past column 30 (x = $F0 = 240 pixels = 30 tiles * 8)
   LDA ball2x
-  CMP #RIGHTWALL
-  BCC MoveBall2RightDone ; if ball x < right wall, still on screen
-  LDA #RIGHTWALL
-  STA ball2x             ; clamp to right wall
+  CMP #$F0
+  BCC MoveBall2RightDone ; if ball x < $F0, still in bounds
+  LDA #$F0
+  STA ball2x             ; clamp to column 30
 MoveBall2RightDone:
 
 SkipHorizontalMovement:
@@ -3827,27 +3833,27 @@ WrapDigit3To9:
 
 CheckSecretCode:
   ; Check if the entered code matches any secrets
-  ; Check for code 1234 (secret message 0)
+  ; Check for code 2226 (secret message 1 - Primera Junta)
   LDA secret_digit1
-  CMP #$01
+  CMP #$02
   BNE CheckCode2
   LDA secret_digit2
   CMP #$02
   BNE CheckCode2
   LDA secret_digit3
-  CMP #$03
+  CMP #$02
   BNE CheckCode2
   LDA secret_digit4
-  CMP #$04
+  CMP #$06
   BNE CheckCode2
   
-  ; Success! Code 1234 found
-  LDA #$00              ; message index 0
+  ; Success! Code 2226 found
+  LDA #$01              ; message index 1
   STA secret_msg_index
   JMP ShowSecretMessage
 
 CheckCode2:
-  ; Check for code 1998 (secret message 1)
+  ; Check for code 1998 (secret image - Pilar art)
   LDA secret_digit1
   CMP #$01
   BNE CheckCode3
@@ -3861,18 +3867,16 @@ CheckCode2:
   CMP #$08
   BNE CheckCode3
   
-  ; Success! Code 1998 found
-  LDA #$01              ; message index 1
-  STA secret_msg_index
-  JMP ShowSecretMessage
+  ; Success! Code 1998 found - show image
+  JMP ShowSecretImage
 
 CheckCode3:
-  ; Check for code 1111 (secret image)
+  ; Check for code 2311 (secret message 2 - Nico's message)
   LDA secret_digit1
-  CMP #$01
+  CMP #$02
   BNE CheckCodeError
   LDA secret_digit2
-  CMP #$01
+  CMP #$03
   BNE CheckCodeError
   LDA secret_digit3
   CMP #$01
@@ -3881,8 +3885,10 @@ CheckCode3:
   CMP #$01
   BNE CheckCodeError
   
-  ; Success! Code 1111 found - show image
-  JMP ShowSecretImage
+  ; Success! Code 2311 found
+  LDA #$02              ; message index 2
+  STA secret_msg_index
+  JMP ShowSecretMessage
 
 CheckCodeError:
   ; No match found, show error
@@ -4007,45 +4013,15 @@ WriteNextCharacter:
   ; Write the next character of the secret message
   ; Check which message to display
   LDA secret_msg_index
-  CMP #$00
-  BEQ WriteMessage0
   CMP #$01
-  BEQ WriteMessage1
+  BNE CheckMessage2
+  JMP WriteMessage1
+CheckMessage2:
+  CMP #$02
+  BEQ JumpToWriteMessage2
   JMP WriteNextCharDone  ; unknown message
-  
-WriteMessage0:
-  ; Get character from message 0 (uses 8-bit index, message is short)
-  LDX secret_msg_char_index_lo
-  LDA SecretMessage0, X
-  CMP #$FF              ; $FF = end of message marker
-  BEQ JumpToWriteNextCharDone
-  
-  ; Calculate PPU address: $2000 + char_index
-  ; Start at row 10, column 2 = $2000 + (10 * 32) + 2 = $2000 + $142 = $2142
-  LDA $2002             ; reset PPU latch
-  LDA #$21
-  STA $2006
-  
-  ; Calculate low byte: $42 + char_index
-  LDA #$42
-  CLC
-  ADC secret_msg_char_index_lo
-  STA $2006
-  
-  ; Write the character
-  LDX secret_msg_char_index_lo
-  LDA SecretMessage0, X
-  STA $2007
-  
-  ; Increment 16-bit character index
-  INC secret_msg_char_index_lo
-  BNE WriteMsg0Done
-  INC secret_msg_char_index_hi
-WriteMsg0Done:
-  JMP WriteNextCharDone
-
-JumpToWriteNextCharDone:
-  JMP WriteNextCharDone
+JumpToWriteMessage2:
+  JMP WriteMessage2
 
 WriteMessage1:
   ; Get character from message 1 (uses 16-bit index for long messages)
@@ -4088,9 +4064,13 @@ WriteMsg1Page3:
   
 WriteMsg1CheckEnd:
   CMP #$FF              ; $FF = end of message marker
-  BEQ JumpToWriteNextCharDone
+  BNE CheckLineBreak
+  JMP WriteNextCharDone
+CheckLineBreak:
   CMP #$FE              ; $FE = line break marker (fill rest of line with spaces)
-  BEQ HandleLineBreak
+  BNE NormalCharacter
+  JMP HandleLineBreak
+NormalCharacter:
   
   ; Normal character - save temporarily
   PHA
@@ -4224,24 +4204,32 @@ CheckSpaceResult:
   STA secret_msg_draw_flag
   ; Also reset timer to 1 so it triggers immediately next frame
   STA secret_msg_timer
+  JMP WriteNextCharDone
+
+WriteMessage2:
+  ; Get character from message 2 (Nico's message) - reuse Message1 logic
+  LDY secret_msg_char_index_lo
+  
+  ; Check if char_index_hi is 0 (first 256 chars)
+  LDA secret_msg_char_index_hi
+  BNE WriteNextCharDone  ; beyond our message
+  
+  ; Read from SecretMessage2
+  LDA SecretMessage2, Y
+  
+  ; Now jump to shared code from WriteMessage1
+  JMP WriteMsg1CheckEnd
   
 WriteNextCharDone:
   RTS
 
 ; Secret message data
-; Message 0 (for code 1234): "THIS IS A SECRET MESSAGE"
-SecretMessage0:
-  .db $1D,$11,$12,$1C,$24,$12,$1C,$24,$0A,$24,$1C,$0E,$0C,$1B,$0E,$1D,$24,$16,$0E,$1C,$1C,$0A,$10,$0E,$FF
-  ; T   H   I   S   _   I   S   _   A   _   S   E   C   R   E   T   _   M   E   S   S   A   G   E   (end)
-
 SecretMessage1:
   ; Compressed format: actual text only, $FE = line break (fill rest of line with spaces)
-  ; Line 1: " 1998, tambien conocido"
-  .db $24,$01,$09,$09,$08,$2D,$24,$1D,$0A,$16,$0B,$12,$0E,$17,$24,$0C,$18,$17,$18,$0C,$12,$0D,$18,$FE
-  ; Line 2: " como el 1 de la Era"
-  .db $24,$0C,$18,$16,$18,$24,$0E,$15,$24,$01,$24,$0D,$0E,$24,$15,$0A,$24,$0E,$1B,$0A,$FE
-  ; Line 3: " Pilar."
-  .db $24,$19,$12,$15,$0A,$1B,$2F,$FE
+  ; Line 1: " Primera Junta 2226,"
+  .db $24,$19,$1B,$12,$16,$0E,$1B,$0A,$24,$13,$1E,$17,$1D,$0A,$24,$02,$02,$02,$06,$2D,$FE
+  ; Line 2: " donde vivimos todo."
+  .db $24,$0D,$18,$17,$0D,$0E,$24,$1F,$12,$1F,$12,$16,$18,$1C,$24,$1D,$18,$0D,$18,$2F,$FE
   ; Line 4: (empty line)
   .db $FE
   ; Line 5: " Desde las canciones de"
@@ -4288,6 +4276,40 @@ SecretMessage1:
   .db $24,$1D,$0E,$24,$0A,$16,$0A,$16,$18,$1C,$2F,$FE
   ; Line 26: " Tu familia."
   .db $24,$1D,$1E,$24,$0F,$0A,$16,$12,$15,$12,$0A,$2F,$FF
+  ; (end marker)
+
+SecretMessage2:
+  ; Compressed format: actual text only, $FE = line break (fill rest of line with spaces)
+  ; Line 1: " GRACIAS POR JUGAR!"
+  .db $24,$10,$1B,$0A,$0C,$12,$0A,$1C,$24,$19,$18,$1B,$24,$13,$1E,$10,$0A,$1B,$2B,$FE
+  ; Line 2: (empty line)
+  .db $FE
+  ; Line 3: " Hecho con amor para"
+  .db $24,$11,$0E,$0C,$11,$18,$24,$0C,$18,$17,$24,$0A,$16,$18,$1B,$24,$19,$0A,$1B,$0A,$FE
+  ; Line 4: " Pili y Eze."
+  .db $24,$19,$12,$15,$12,$24,$22,$24,$0E,$23,$0E,$2F,$FE
+  ; Line 5: " Verlos juntos es mi"
+  .db $24,$1F,$0E,$1B,$15,$18,$1C,$24,$13,$1E,$17,$1D,$18,$1C,$24,$0E,$1C,$24,$16,$12,$FE
+  ; Line 6: " high score favorito."
+  .db $24,$11,$12,$10,$11,$24,$1C,$0C,$18,$1B,$0E,$24,$0F,$0A,$1F,$18,$1B,$12,$1D,$18,$2F,$FE
+  ; Line 7: " Espero que este juego"
+  .db $24,$0E,$1C,$19,$0E,$1B,$18,$24,$1A,$1E,$0E,$24,$0E,$1C,$1D,$0E,$24,$13,$1E,$0E,$10,$18,$FE
+  ; Line 8: " se convierta en uno de"
+  .db $24,$1C,$0E,$24,$0C,$18,$17,$1F,$12,$0E,$1B,$1D,$0A,$24,$0E,$17,$24,$1E,$17,$18,$24,$0D,$0E,$FE
+  ; Line 9: " esos recuerdos que"
+  .db $24,$0E,$1C,$18,$1C,$24,$1B,$0E,$0C,$1E,$0E,$1B,$0D,$18,$1C,$24,$1A,$1E,$0E,$FE
+  ; Line 10: " nunca se borran."
+  .db $24,$17,$1E,$17,$0C,$0A,$24,$1C,$0E,$24,$0B,$18,$1B,$1B,$0A,$17,$2F,$FE
+  ; Line 11: (empty line)
+  .db $FE
+  ; Line 12: " Nos vemos en el proximo"
+  .db $24,$17,$18,$1C,$24,$1F,$0E,$16,$18,$1C,$24,$0E,$17,$24,$0E,$15,$24,$19,$1B,$18,$21,$12,$16,$18,$FE
+  ; Line 13: " nivel!"
+  .db $24,$17,$12,$1F,$0E,$15,$2B,$FE
+  ; Line 14: (empty line)
+  .db $FE
+  ; Line 15: " - Nico"
+  .db $24,$28,$24,$17,$12,$0C,$18,$FF
   ; (end marker)
 
 
