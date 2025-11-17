@@ -70,6 +70,10 @@ p1_facing     .rs 1  ; Player 1 facing direction (0=right, 1=left)
 p2_anim_frame .rs 1  ; Player 2 animation frame (0, 1, or 2)  
 p2_anim_timer .rs 1  ; Player 2 animation timer
 p2_facing     .rs 1  ; Player 2 facing direction (0=right, 1=left)
+; easter egg timer
+easter_egg_timer_lo .rs 1  ; low byte of 16-bit timer (15 seconds = 900 frames at 60fps)
+easter_egg_timer_hi .rs 1  ; high byte of 16-bit timer
+easter_egg_triggered .rs 1  ; 1 = easter egg already triggered this game, 0 = not yet
 ; pointer variables for background loading
 pointerLo     .rs 1  ; pointer low byte
 pointerHi     .rs 1  ; pointer high byte
@@ -78,6 +82,7 @@ menu_selection .rs 1  ; 0 = start, 1 = secretos
 menu_cursor_y  .rs 1  ; Y position of cursor sprite
 menu_cursor_x  .rs 1  ; X position of cursor sprite
 input_timer    .rs 1  ; timer to prevent immediate button triggers (counts down from 120)
+hide_sprites_flag .rs 1  ; flag to hide sprites in NMI (1 = hide, 0 = normal)
 ; secretos screen variables
 secret_digit1  .rs 1  ; first digit (0-9)
 secret_digit2  .rs 1  ; second digit (0-9)
@@ -110,6 +115,7 @@ STATEWINSCREEN = $04  ; displaying winner screen
 STATESECRETOS  = $05  ; displaying secretos screen
 STATESECRETMSG = $06  ; displaying secret message
 STATESECRETIMG = $07  ; displaying secret image
+STATEEASTERGG  = $08  ; displaying easter egg message
   
 RIGHTWALL      = $F4  ; when ball reaches one of these, do something
 TOPWALL        = $20
@@ -424,6 +430,16 @@ Forever:
  
 
 NMI:
+  ; Check if we need to hide sprites
+  LDA hide_sprites_flag
+  BEQ NormalSpriteUpdate
+  
+  ; Hide sprites by clearing OAM
+  JSR HideAllSprites
+  LDA #$00
+  STA hide_sprites_flag  ; clear flag
+  
+NormalSpriteUpdate:
   LDA #$00
   STA $2003       ; set the low byte (00) of the RAM address
   LDA #$02
@@ -505,8 +521,13 @@ CheckSecretMsg:
 
 CheckSecretImg:
   CMP #STATESECRETIMG
-  BNE CheckGameOver
+  BNE CheckEasterEgg
   JMP EngineSecretImage  ;;game is displaying secret image
+    
+CheckEasterEgg:
+  CMP #STATEEASTERGG
+  BNE CheckGameOver
+  JMP EngineEasterEgg  ;;game is displaying easter egg
     
 CheckGameOver:
   CMP #STATEGAMEOVER
@@ -750,6 +771,14 @@ WaitVBlankLoadingToGame:
   
   ; Load game background
   JSR LoadBackground
+  
+  ; Initialize easter egg timer (15 seconds = 900 frames)
+  LDA #LOW(900)         ; low byte of 900
+  STA easter_egg_timer_lo
+  LDA #HIGH(900)        ; high byte of 900
+  STA easter_egg_timer_hi
+  LDA #$00
+  STA easter_egg_triggered  ; easter egg not triggered yet
   
   ; Set game state to playing
   LDA #STATEPLAYING
@@ -1102,6 +1131,14 @@ RestartGame:
   STA score2Tens
   STA score2Hundreds
 
+  ; Initialize easter egg timer (15 seconds = 900 frames)
+  LDA #LOW(900)         ; low byte of 900
+  STA easter_egg_timer_lo
+  LDA #HIGH(900)        ; high byte of 900
+  STA easter_egg_timer_hi
+  LDA #$00
+  STA easter_egg_triggered  ; easter egg not triggered yet
+
   ; Set game state to PLAYING (not title screen)
   LDA #STATEPLAYING
   STA gamestate
@@ -1123,6 +1160,7 @@ EnginePlaying:
   JSR HandleFallingItemLeftZone
   JSR HandleFallingItemRightZone
   JSR HandleCakeMovement
+  JSR UpdateEasterEggTimer
   JMP GameEngineDone
 
 ; Physics-based player movement
@@ -1590,6 +1628,10 @@ BadItemCollisionPlayer1:
   ; Play catch sound effect
   LDA #$05              ; song 5 (catch object sound effect)
   JSR sound_load
+  
+  ; Stop easter egg timer permanently (object was grabbed)
+  LDA #$01
+  STA easter_egg_triggered
   JMP ItemCollisionDone
 
 BadItemCollisionPlayer2:
@@ -1599,6 +1641,10 @@ BadItemCollisionPlayer2:
   ; Play catch sound effect
   LDA #$05              ; song 5 (catch object sound effect)
   JSR sound_load
+  
+  ; Stop easter egg timer permanently (object was grabbed)
+  LDA #$01
+  STA easter_egg_triggered
   JMP ItemCollisionDone
   
 GoodItemCollisionPlayer1:
@@ -1608,6 +1654,10 @@ GoodItemCollisionPlayer1:
   ; Play catch sound effect
   LDA #$05              ; song 5 (catch object sound effect)
   JSR sound_load
+  
+  ; Stop easter egg timer permanently (object was grabbed)
+  LDA #$01
+  STA easter_egg_triggered
   JMP ItemCollisionDone
 
 GoodItemCollisionPlayer2:
@@ -1617,6 +1667,10 @@ GoodItemCollisionPlayer2:
   ; Play catch sound effect
   LDA #$05              ; song 5 (catch object sound effect)
   JSR sound_load
+  
+  ; Stop easter egg timer permanently (object was grabbed)
+  LDA #$01
+  STA easter_egg_triggered
   JMP ItemCollisionDone
 
 CakeItemCollisionPlayer1:
@@ -1631,6 +1685,10 @@ CakeItemCollisionPlayer1:
   ; Play catch sound effect
   LDA #$05              ; song 5 (catch object sound effect)
   JSR sound_load
+  
+  ; Stop easter egg timer permanently (object was grabbed)
+  LDA #$01
+  STA easter_egg_triggered
   JMP ItemCollisionDone
 
 CakeItemCollisionPlayer2:
@@ -1646,6 +1704,10 @@ CakeItemCollisionPlayer2:
   ; Play catch sound effect
   LDA #$05              ; song 5 (catch object sound effect)
   JSR sound_load
+  
+  ; Stop easter egg timer permanently (object was grabbed)
+  LDA #$01
+  STA easter_egg_triggered
   
 ItemCollisionDone:
   LDA #$00
@@ -1772,6 +1834,10 @@ GoodItem2CollisionPlayer2:
   ; Play catch sound effect
   LDA #$05              ; song 5 (catch object sound effect)
   JSR sound_load
+  
+  ; Stop easter egg timer permanently (object was grabbed)
+  LDA #$01
+  STA easter_egg_triggered
   JMP Item2CollisionDone
 
 BadItem2CollisionPlayer2:
@@ -1781,6 +1847,10 @@ BadItem2CollisionPlayer2:
   ; Play catch sound effect
   LDA #$05              ; song 5 (catch object sound effect)
   JSR sound_load
+  
+  ; Stop easter egg timer permanently (object was grabbed)
+  LDA #$01
+  STA easter_egg_triggered
   JMP Item2CollisionDone
 
 CakeItem2CollisionPlayer2:
@@ -1795,6 +1865,10 @@ CakeItem2CollisionPlayer2:
   ; Play catch sound effect
   LDA #$05              ; song 5 (catch object sound effect)
   JSR sound_load
+  
+  ; Stop easter egg timer permanently (object was grabbed)
+  LDA #$01
+  STA easter_egg_triggered
   JMP Item2CollisionDone
 
 Item2CollisionDone:
@@ -2316,6 +2390,10 @@ UpdateSprites:
   CMP #STATESECRETIMG
   BEQ JumpToHideAllSprites
   
+  ; Check if we're on easter egg screen - if so, hide all sprites
+  CMP #STATEEASTERGG
+  BEQ JumpToHideAllSprites
+  
   ; Update Player 1 (16x16 character using sprites 0-3)
   JSR UpdatePlayer1Sprites
   
@@ -2566,6 +2644,12 @@ CheckSecretMsgScore:
 CheckSecretImgScore:
   ; Check if we're on secret image screen - if so, skip drawing score
   CMP #STATESECRETIMG
+  BNE CheckEasterEggScore
+  JMP SkipDrawScore
+  
+CheckEasterEggScore:
+  ; Check if we're on easter egg screen - if so, skip drawing score
+  CMP #STATEEASTERGG
   BNE CheckWinScore
   JMP SkipDrawScore
   
@@ -2915,25 +2999,32 @@ UpdateProgressiveSpeed:
   STA total_score
   
   ; Determine speed level based on total score
+  ; Speed can only increase, never decrease
   CMP #$05              ; 5 points
-  BCC SpeedLevel0       ; if < 5, stay at level 0
+  BCC CheckCurrentSpeed ; if < 5, check if we should stay at current level
   CMP #$0A              ; 10 points  
-  BCC SpeedLevel1       ; if < 10, go to level 1
+  BCC SpeedLevel1       ; if < 10, try to go to level 1 (if not already higher)
   CMP #$14              ; 20 points (hex $14 = decimal 20)
-  BCC SpeedLevel2       ; if < 20, go to level 2
+  BCC SpeedLevel2       ; if < 20, try to go to level 2 (if not already higher)
   ; else level 3
   LDA #$03
-  JMP SetSpeedLevel
+  JMP SetSpeedLevelIfHigher
 SpeedLevel2:
   LDA #$02
-  JMP SetSpeedLevel
+  JMP SetSpeedLevelIfHigher
 SpeedLevel1:
   LDA #$01
-  JMP SetSpeedLevel
-SpeedLevel0:
-  LDA #$00
-SetSpeedLevel:
-  STA speed_level
+  JMP SetSpeedLevelIfHigher
+CheckCurrentSpeed:
+  ; Score is less than 5, don't change speed_level at all
+  RTS
+SetSpeedLevelIfHigher:
+  ; Only set new speed level if it's higher than current
+  CMP speed_level
+  BCC DontChangeSpeed   ; if new level < current level, don't change
+  BEQ DontChangeSpeed   ; if new level = current level, don't change
+  STA speed_level       ; new level > current level, set it
+DontChangeSpeed:
   RTS
 
 GetCurrentItemSpeed:
@@ -2958,6 +3049,307 @@ Speed0:
   LDA #$02              ; 2 pixels/frame (normal)
   RTS
 
+UpdateEasterEggTimer:
+  ; Check if easter egg already triggered
+  LDA easter_egg_triggered
+  BNE EasterEggTimerDone  ; if already triggered, don't count down
+  
+  ; Decrement 16-bit timer
+  LDA easter_egg_timer_lo
+  SEC
+  SBC #$01
+  STA easter_egg_timer_lo
+  LDA easter_egg_timer_hi
+  SBC #$00              ; subtract with borrow
+  STA easter_egg_timer_hi
+  
+  ; Check if timer reached 0
+  LDA easter_egg_timer_lo
+  ORA easter_egg_timer_hi  ; if both bytes are 0, Z flag is set
+  BNE EasterEggTimerDone
+  
+  ; Timer reached 0! Trigger easter egg
+  LDA #$01
+  STA easter_egg_triggered
+  JSR ShowEasterEgg
+  
+EasterEggTimerDone:
+  RTS
+
+ShowEasterEgg:
+  ; Set flag to hide sprites in next NMI
+  LDA #$01
+  STA hide_sprites_flag
+  
+  ; Wait a frame for sprites to be hidden
+  LDA $2002
+WaitFrameForSpriteHide:
+  BIT $2002
+  BPL WaitFrameForSpriteHide
+  
+  ; Turn screen off
+  LDA #%00000000
+  STA $2001
+  STA $2000
+  
+  ; Wait for vblank
+  LDA $2002
+WaitVBlankEasterEgg:
+  BIT $2002
+  BPL WaitVBlankEasterEgg
+  
+  ; Load black screen
+  JSR LoadEasterEggScreen
+  
+  ; Set game state
+  LDA #STATEEASTERGG
+  STA gamestate
+  
+  ; Stop music
+  LDA #$00              ; song 0 (silence)
+  JSR sound_load
+  
+  ; Turn screen back on
+  LDA #%10010000
+  STA $2000
+  LDA #%00011110
+  STA $2001
+  RTS
+
+LoadEasterEggScreen:
+  ; Fill screen with black (space tiles)
+  LDA $2002
+  LDA #$20
+  STA $2006
+  LDA #$00
+  STA $2006
+  
+  LDX #$04              ; 4 pages (1024 bytes)
+  LDY #$00
+LoadEasterEggLoop:
+  LDA #$24              ; space tile
+  STA $2007
+  INY
+  BNE LoadEasterEggLoop
+  DEX
+  BNE LoadEasterEggLoop
+  
+  ; Set all attributes to palette 3 (black background, white text)
+  LDA $2002
+  LDA #$23
+  STA $2006
+  LDA #$C0
+  STA $2006
+  
+  LDX #$40              ; 64 attribute bytes
+LoadEasterEggAttrLoop:
+  LDA #%11111111        ; all quadrants use palette 3 (white text)
+  STA $2007
+  DEX
+  BNE LoadEasterEggAttrLoop
+  
+  ; Draw the message "El verdadero amor es trabajar en equipo, felicitaciones Pili y Eze"
+  ; Line 1: "El verdadero amor es"
+  LDA $2002
+  LDA #$21              ; row 8
+  STA $2006
+  LDA #$06              ; column 6 (centered)
+  STA $2006
+  
+  LDA #$0E ; 'E'
+  STA $2007
+  LDA #$15 ; 'l'
+  STA $2007
+  LDA #$24 ; ' '
+  STA $2007
+  LDA #$1F ; 'v'
+  STA $2007
+  LDA #$0E ; 'e'
+  STA $2007
+  LDA #$1B ; 'r'
+  STA $2007
+  LDA #$0D ; 'd'
+  STA $2007
+  LDA #$0A ; 'a'
+  STA $2007
+  LDA #$0D ; 'd'
+  STA $2007
+  LDA #$0E ; 'e'
+  STA $2007
+  LDA #$1B ; 'r'
+  STA $2007
+  LDA #$18 ; 'o'
+  STA $2007
+  LDA #$24 ; ' '
+  STA $2007
+  LDA #$0A ; 'a'
+  STA $2007
+  LDA #$16 ; 'm'
+  STA $2007
+  LDA #$18 ; 'o'
+  STA $2007
+  LDA #$1B ; 'r'
+  STA $2007
+  LDA #$24 ; ' '
+  STA $2007
+  LDA #$0E ; 'e'
+  STA $2007
+  LDA #$1C ; 's'
+  STA $2007
+  
+  ; Line 2: "trabajar en equipo"
+  LDA $2002
+  LDA #$21              ; row 9
+  STA $2006
+  LDA #$46              ; column 6
+  STA $2006
+  
+  LDA #$1D ; 't'
+  STA $2007
+  LDA #$1B ; 'r'
+  STA $2007
+  LDA #$0A ; 'a'
+  STA $2007
+  LDA #$0B ; 'b'
+  STA $2007
+  LDA #$0A ; 'a'
+  STA $2007
+  LDA #$13 ; 'j'
+  STA $2007
+  LDA #$0A ; 'a'
+  STA $2007
+  LDA #$1B ; 'r'
+  STA $2007
+  LDA #$24 ; ' '
+  STA $2007
+  LDA #$0E ; 'e'
+  STA $2007
+  LDA #$17 ; 'n'
+  STA $2007
+  LDA #$24 ; ' '
+  STA $2007
+  LDA #$0E ; 'e'
+  STA $2007
+  LDA #$1A ; 'q'
+  STA $2007
+  LDA #$1E ; 'u'
+  STA $2007
+  LDA #$12 ; 'i'
+  STA $2007
+  LDA #$19 ; 'p'
+  STA $2007
+  LDA #$18 ; 'o'
+  STA $2007
+  
+  ; Line 3: "felicitaciones"
+  LDA $2002
+  LDA #$21              ; row 10
+  STA $2006
+  LDA #$89              ; column 9
+  STA $2006
+  
+  LDA #$0F ; 'f'
+  STA $2007
+  LDA #$0E ; 'e'
+  STA $2007
+  LDA #$15 ; 'l'
+  STA $2007
+  LDA #$12 ; 'i'
+  STA $2007
+  LDA #$0C ; 'c'
+  STA $2007
+  LDA #$12 ; 'i'
+  STA $2007
+  LDA #$1D ; 't'
+  STA $2007
+  LDA #$0A ; 'a'
+  STA $2007
+  LDA #$0C ; 'c'
+  STA $2007
+  LDA #$12 ; 'i'
+  STA $2007
+  LDA #$18 ; 'o'
+  STA $2007
+  LDA #$17 ; 'n'
+  STA $2007
+  LDA #$0E ; 'e'
+  STA $2007
+  LDA #$1C ; 's'
+  STA $2007
+  
+  ; Line 4: "Pili y Eze"
+  LDA $2002
+  LDA #$21              ; row 11
+  STA $2006
+  LDA #$CD              ; column 13 (centered)
+  STA $2006
+  
+  LDA #$19 ; 'P'
+  STA $2007
+  LDA #$12 ; 'i'
+  STA $2007
+  LDA #$15 ; 'l'
+  STA $2007
+  LDA #$12 ; 'i'
+  STA $2007
+  LDA #$24 ; ' '
+  STA $2007
+  LDA #$22 ; 'y'
+  STA $2007
+  LDA #$24 ; ' '
+  STA $2007
+  LDA #$0E ; 'E'
+  STA $2007
+  LDA #$23 ; 'z'
+  STA $2007
+  LDA #$0E ; 'e'
+  STA $2007
+  
+  RTS
+
+EngineEasterEgg:
+  ; Check for B button to return to game
+  LDA buttons1
+  AND #%01000000        ; B button (bit 6)
+  BNE ReturnFromEasterEgg
+  
+  LDA buttons2
+  AND #%01000000        ; B button (bit 6)
+  BNE ReturnFromEasterEgg
+  
+  JMP GameEngineDone
+
+ReturnFromEasterEgg:
+  ; Turn screen off
+  LDA #%00000000
+  STA $2001
+  STA $2000
+  
+  ; Wait for vblank
+  LDA $2002
+WaitVBlankReturnFromEasterEgg:
+  BIT $2002
+  BPL WaitVBlankReturnFromEasterEgg
+  
+  ; Reload game background
+  JSR LoadPalettes
+  JSR LoadBackground
+  
+  ; Set game state back to playing
+  LDA #STATEPLAYING
+  STA gamestate
+  
+  ; Restart game music
+  LDA #$01              ; song 1 (Guardian Legend Boss)
+  JSR sound_load
+  
+  ; Turn screen back on
+  LDA #%10010000
+  STA $2000
+  LDA #%00011110
+  STA $2001
+  
+  JMP GameEngineDone
 
   
 ReadController1:
