@@ -3874,19 +3874,39 @@ CheckCode3:
   ; Check for code 2311 (secret message 2 - Nico's message)
   LDA secret_digit1
   CMP #$02
-  BNE CheckCodeError
+  BNE CheckCode4
   LDA secret_digit2
   CMP #$03
+  BNE CheckCode4
+  LDA secret_digit3
+  CMP #$01
+  BNE CheckCode4
+  LDA secret_digit4
+  CMP #$01
+  BNE CheckCode4
+  
+  ; Success! Code 2311 found
+  LDA #$02              ; message index 2
+  STA secret_msg_index
+  JMP ShowSecretMessage
+
+CheckCode4:
+  ; Check for code 1913 (secret message 3 - Museum message)
+  LDA secret_digit1
+  CMP #$01
+  BNE CheckCodeError
+  LDA secret_digit2
+  CMP #$09
   BNE CheckCodeError
   LDA secret_digit3
   CMP #$01
   BNE CheckCodeError
   LDA secret_digit4
-  CMP #$01
+  CMP #$03
   BNE CheckCodeError
   
-  ; Success! Code 2311 found
-  LDA #$02              ; message index 2
+  ; Success! Code 1913 found
+  LDA #$03              ; message index 3
   STA secret_msg_index
   JMP ShowSecretMessage
 
@@ -4018,10 +4038,14 @@ WriteNextCharacter:
   JMP WriteMessage1
 CheckMessage2:
   CMP #$02
-  BEQ JumpToWriteMessage2
-  JMP WriteNextCharDone  ; unknown message
-JumpToWriteMessage2:
+  BNE CheckMessage3
   JMP WriteMessage2
+CheckMessage3:
+  CMP #$03
+  BEQ JumpToWriteMessage3
+  JMP WriteNextCharDone  ; unknown message
+JumpToWriteMessage3:
+  JMP WriteMessage3
 
 WriteMessage1:
   ; Get character from message 1 (uses 16-bit index for long messages)
@@ -4219,11 +4243,59 @@ WriteMessage2:
   
   ; Now jump to shared code from WriteMessage1
   JMP WriteMsg1CheckEnd
+
+WriteMessage3:
+  ; Get character from message 3 (Museum message) - reuse Message1 logic
+  LDY secret_msg_char_index_lo
+  
+  ; Check if char_index_hi is 0 (first 256 chars)
+  LDA secret_msg_char_index_hi
+  BNE WriteNextCharDone  ; beyond our message
+  
+  ; Read from SecretMessage3
+  LDA SecretMessage3, Y
+  
+  ; Now jump to shared code from WriteMessage1
+  JMP WriteMsg1CheckEnd
   
 WriteNextCharDone:
   RTS
 
-; Secret message data
+;;;;;;;;;;;;;;
+;; SOUND ENGINE
+;;;;;;;;;;;;;;
+
+  .include "sound_engine.asm"
+
+  
+  .bank 1
+  .org $E000
+
+;;;;;;;;;;;;;;
+;; SONG DATA (moved to bank 1 to save space in bank 0)
+;;;;;;;;;;;;;;
+
+  .include "song0.i"
+  .include "song1.i"
+  .include "song2.i"
+  .include "song3.i"
+  .include "song4.i"
+  .include "song5.i"
+
+;;;;;;;;;;;;;;
+;; LARGE DATA (moved to bank 1 to save space in bank 0)
+;;;;;;;;;;;;;;
+
+gameBackground:
+  .incbin "pilarbg1.nam"
+
+SecretImageData:
+  .incbin "pilarart2.nam"
+
+;;;;;;;;;;;;;;
+;; SECRET MESSAGE DATA (moved to bank 1 to save space in bank 0)
+;;;;;;;;;;;;;;
+
 SecretMessage1:
   ; Compressed format: actual text only, $FE = line break (fill rest of line with spaces)
   ; Line 1: " Primera Junta 2226,"
@@ -4312,41 +4384,36 @@ SecretMessage2:
   .db $24,$28,$24,$17,$12,$0C,$18,$FF
   ; (end marker)
 
-
-;;;;;;;;;;;;;;
-;; SOUND ENGINE
-;;;;;;;;;;;;;;
-
-  .include "sound_engine.asm"
-
-  
-  .bank 1
-  .org $E000
-
-;;;;;;;;;;;;;;
-;; SONG DATA (moved to bank 1 to save space in bank 0)
-;;;;;;;;;;;;;;
-
-  .include "song0.i"
-  .include "song1.i"
-  .include "song2.i"
-  .include "song3.i"
-  .include "song4.i"
-  .include "song5.i"
-
-;;;;;;;;;;;;;;
-;; LARGE DATA (moved to bank 1 to save space in bank 0)
-;;;;;;;;;;;;;;
-
-gameBackground:
-  .incbin "pilarbg1.nam"
+SecretMessage3:
+  ; Compressed format: actual text only, $FE = line break (fill rest of line with spaces)
+  ; Line 1: " Un pan lactal"
+  .db $24,$1E,$17,$24,$19,$0A,$17,$24,$15,$0A,$0C,$1D,$0A,$15,$FE
+  ; Line 2: " Un diclofenac en capsula"
+  .db $24,$1E,$17,$24,$0D,$12,$0C,$15,$18,$0F,$0E,$17,$0A,$0C,$24,$0E,$17,$24,$0C,$0A,$19,$1C,$1E,$15,$0A,$FE
+  ; Line 3: " Los ositos de dulce de"
+  .db $24,$15,$18,$1C,$24,$18,$1C,$12,$1D,$18,$1C,$24,$0D,$0E,$24,$0D,$1E,$15,$0C,$0E,$24,$0D,$0E,$FE
+  ; Line 4: " leche"
+  .db $24,$15,$0E,$0C,$11,$0E,$FE
+  ; Line 5: " Un corazon que late"
+  .db $24,$1E,$17,$24,$0C,$18,$1B,$0A,$23,$18,$17,$24,$1A,$1E,$0E,$24,$15,$0A,$1D,$0E,$FE
+  ; Line 6: " Algunas de las cosas del"
+  .db $24,$0A,$15,$10,$1E,$17,$0A,$1C,$24,$0D,$0E,$24,$15,$0A,$1C,$24,$0C,$18,$1C,$0A,$1C,$24,$0D,$0E,$15,$FE
+  ; Line 7: " museo de Pilar."
+  .db $24,$16,$1E,$1C,$0E,$18,$24,$0D,$0E,$24,$19,$12,$15,$0A,$1B,$2F,$FE
+  ; Line 8: " Deseamos que haya muchas"
+  .db $24,$0D,$0E,$1C,$0E,$0A,$16,$18,$1C,$24,$1A,$1E,$0E,$24,$11,$0A,$22,$0A,$24,$16,$1E,$0C,$11,$0A,$1C,$FE
+  ; Line 9: " mas obras de arte en tu"
+  .db $24,$16,$0A,$1C,$24,$18,$0B,$1B,$0A,$1C,$24,$0D,$0E,$24,$0A,$1B,$1D,$0E,$24,$0E,$17,$24,$1D,$1E,$FE
+  ; Line 10: " nuevo hogar!"
+  .db $24,$17,$1E,$0E,$1F,$18,$24,$11,$18,$10,$0A,$1B,$2B,$FE
+  ; Line 11: (empty line)
+  .db $FE
+  ; Line 12: " Tus hermanos, Nico y Rocio"
+  .db $24,$1D,$1E,$1C,$24,$11,$0E,$1B,$16,$0A,$17,$18,$1C,$2D,$24,$17,$12,$0C,$18,$24,$22,$24,$1B,$18,$0C,$12,$18,$FF
+  ; (end marker)
 
 titleScreen:
   .incbin "pilartitle.nam"
-
-SecretImageData:
-  ; Secret image nametable + attributes (1024 bytes)
-  .incbin "pilarart2.nam"
 
 titlepalette:
   .db $0F,$20,$10,$0F,  $0F,$21,$20,$31,  $0F,$15,$20,$26,  $0F,$00,$10,$30   ;;title background palette
