@@ -96,6 +96,9 @@ secret_msg_timer .rs 1  ; timer for character writing speed
 secret_msg_draw_flag .rs 1  ; 1=need to write next character during NMI, 0=no write needed
 loading_timer    .rs 1  ; timer for loading screen (counts frames, 600 frames = 10 seconds)
 loading_timer_hi .rs 1  ; high byte of loading timer (16-bit counter)
+; sound engine pointer variables (must be in zero page for indirect indexed addressing)
+sound_ptr .rs 2         ; 16-bit pointer for sound data
+jmp_ptr .rs 2           ; 16-bit pointer for opcode jumps
 
 
 ;; DECLARE SOME CONSTANTS HERE
@@ -172,6 +175,9 @@ clrmem:
 vblankwait2:      ; Second wait for vblank, PPU is ready after this
   BIT $2002
   BPL vblankwait2
+
+  ; Initialize sound engine
+  JSR sound_init
 
   ; Load title screen CHR bank (bank 0)
   LDA #$00          ; put bank 0 (title CHR) into A
@@ -391,6 +397,10 @@ InitializeGame:
   LDA #STATETITLE
   STA gamestate
   
+;;:Play title screen music
+  LDA #$03              ; song 3 (Dragon Warrior overland)
+  JSR sound_load
+  
 ;;:Initialize title screen menu
   LDA #$00              ; start with "start" option selected
   STA menu_selection
@@ -418,6 +428,9 @@ NMI:
   STA $2003       ; set the low byte (00) of the RAM address
   LDA #$02
   STA $4014       ; set the high byte (02) of the RAM address, start the transfer
+
+  ; Update sound engine every frame
+  JSR sound_play_frame
 
   JSR DrawScore
   
@@ -742,6 +755,10 @@ WaitVBlankLoadingToGame:
   LDA #STATEPLAYING
   STA gamestate
   
+  ; Play action music for main game
+  LDA #$01              ; song 1 (Guardian Legend Boss)
+  JSR sound_load
+  
   ; Turn screen back on
   LDA #%10010000
   STA $2000
@@ -935,6 +952,12 @@ WaitVBlankReturnFromImage:
   LDA #$00
   JSR Bankswitch        ; use the bankswitch subroutine
   
+  ; Wait for another vblank to ensure CHR switch takes effect
+  LDA $2002
+WaitVBlankReturnFromImage2:
+  BIT $2002
+  BPL WaitVBlankReturnFromImage2
+  
   ; Load title palettes and screen
   JSR LoadTitlePalettes
   JSR LoadTitleScreen
@@ -942,6 +965,10 @@ WaitVBlankReturnFromImage:
   ; Reset to title state
   LDA #STATETITLE
   STA gamestate
+  
+  ; Play title screen music
+  LDA #$03              ; song 3 (Dragon Warrior overland)
+  JSR sound_load
   
   ; Reset menu selection
   LDA #$00
@@ -981,6 +1008,10 @@ WaitVBlankReturnToTitle2:
   ; Load title palettes and screen
   JSR LoadTitlePalettes
   JSR LoadTitleScreen
+  
+  ; Play title screen music
+  LDA #$03              ; song 3 (Dragon Warrior overland)
+  JSR sound_load
   
   ; Reset menu to start position
   LDA #$00
@@ -1074,6 +1105,10 @@ RestartGame:
   ; Set game state to PLAYING (not title screen)
   LDA #STATEPLAYING
   STA gamestate
+  
+  ; Restart game music
+  LDA #$01              ; song 1 (Guardian Legend Boss)
+  JSR sound_load
   
   JMP GameEngineDone
  
@@ -1214,6 +1249,10 @@ CheckJumpButton:
   ; Set jump_pressed for debugging
   LDA #$01
   STA jump_pressed
+  
+  ; Play jump sound effect
+  LDA #$02              ; song 2 (jump sound effect)
+  JSR sound_load
 
 HandleJumpPlayer2:
   ; Check Player 2 jump button
@@ -1230,6 +1269,10 @@ HandleJumpPlayer2:
   STA jump_counter2
   LDA #$00
   STA on_ground2        ; player 2 no longer on ground
+  
+  ; Play jump sound effect
+  LDA #$02              ; song 2 (jump sound effect)
+  JSR sound_load
 
 HandleJumpDone:
   RTS
@@ -1543,21 +1586,37 @@ CheckPlayer2ItemDone:
 BadItemCollisionPlayer1:
   ; Bad item (broken heart) for Player 1 - subtract 1 point
   JSR DecrementScore
+  
+  ; Play catch sound effect
+  LDA #$05              ; song 5 (catch object sound effect)
+  JSR sound_load
   JMP ItemCollisionDone
 
 BadItemCollisionPlayer2:
   ; Bad item (broken heart) for Player 2 - subtract 1 point
   JSR DecrementScore2
+  
+  ; Play catch sound effect
+  LDA #$05              ; song 5 (catch object sound effect)
+  JSR sound_load
   JMP ItemCollisionDone
   
 GoodItemCollisionPlayer1:
   ; Good item (heart) for Player 1 - add 1 point
   JSR IncrementScore
+  
+  ; Play catch sound effect
+  LDA #$05              ; song 5 (catch object sound effect)
+  JSR sound_load
   JMP ItemCollisionDone
 
 GoodItemCollisionPlayer2:
   ; Good item (heart) for Player 2 - add 1 point
   JSR IncrementScore2
+  
+  ; Play catch sound effect
+  LDA #$05              ; song 5 (catch object sound effect)
+  JSR sound_load
   JMP ItemCollisionDone
 
 CakeItemCollisionPlayer1:
@@ -1568,6 +1627,10 @@ CakeItemCollisionPlayer1:
   STA cakex
   LDA #$00              ; 0 = moving right (targets Player 2)
   STA cakedirection
+  
+  ; Play catch sound effect
+  LDA #$05              ; song 5 (catch object sound effect)
+  JSR sound_load
   JMP ItemCollisionDone
 
 CakeItemCollisionPlayer2:
@@ -1579,6 +1642,10 @@ CakeItemCollisionPlayer2:
   LDA #$01              ; 1 = moving left (targets Player 1)
   STA cakedirection
   ; Cake Y position is fixed at floor level (GROUND_Y)
+  
+  ; Play catch sound effect
+  LDA #$05              ; song 5 (catch object sound effect)
+  JSR sound_load
   
 ItemCollisionDone:
   LDA #$00
@@ -1701,11 +1768,19 @@ CheckPlayer2Item2Done:
 GoodItem2CollisionPlayer2:
   ; Good item (heart) for Player 2 - add 1 point
   JSR IncrementScore2
+  
+  ; Play catch sound effect
+  LDA #$05              ; song 5 (catch object sound effect)
+  JSR sound_load
   JMP Item2CollisionDone
 
 BadItem2CollisionPlayer2:
   ; Bad item (broken heart) for Player 2 - subtract 1 point
   JSR DecrementScore2
+  
+  ; Play catch sound effect
+  LDA #$05              ; song 5 (catch object sound effect)
+  JSR sound_load
   JMP Item2CollisionDone
 
 CakeItem2CollisionPlayer2:
@@ -1716,6 +1791,10 @@ CakeItem2CollisionPlayer2:
   STA cakex
   LDA #$01              ; 1 = moving left (targets Player 1)
   STA cakedirection
+  
+  ; Play catch sound effect
+  LDA #$05              ; song 5 (catch object sound effect)
+  JSR sound_load
   JMP Item2CollisionDone
 
 Item2CollisionDone:
@@ -2735,6 +2814,11 @@ DecHundreds:
   STA winner
   LDA #STATEWINSCREEN
   STA gamestate
+  
+  ; Stop music when someone wins
+  LDA #$00           ; song 0 (silence)
+  JSR sound_load
+  
   LDA #$00           ; clamp score to 000
   STA scoreHundreds
   STA scoreTens
@@ -2807,6 +2891,11 @@ DecHundreds2:
   STA winner
   LDA #STATEWINSCREEN
   STA gamestate
+  
+  ; Stop music when someone wins
+  LDA #$00           ; song 0 (silence)
+  JSR sound_load
+  
   LDA #$00           ; clamp score to 000
   STA score2Hundreds
   STA score2Tens
@@ -3808,21 +3897,38 @@ SecretMessage1:
   ; Line 26: " Tu familia."
   .db $24,$1D,$1E,$24,$0F,$0A,$16,$12,$15,$12,$0A,$2F,$FF
   ; (end marker)
+
+
+;;;;;;;;;;;;;;
+;; SOUND ENGINE
+;;;;;;;;;;;;;;
+
+  .include "sound_engine.asm"
+
   
-  
-    
-        
-;;;;;;;;;;;;;;  
-  
+  .bank 1
+  .org $E000
+
+;;;;;;;;;;;;;;
+;; SONG DATA (moved to bank 1 to save space in bank 0)
+;;;;;;;;;;;;;;
+
+  .include "song0.i"
+  .include "song1.i"
+  .include "song2.i"
+  .include "song3.i"
+  .include "song4.i"
+  .include "song5.i"
+
+;;;;;;;;;;;;;;
+;; LARGE DATA (moved to bank 1 to save space in bank 0)
+;;;;;;;;;;;;;;
+
 gameBackground:
   .incbin "pilarbg1.nam"
 
 titleScreen:
   .incbin "pilartitle.nam"
-  
-  
-  .bank 1
-  .org $E000
 
 SecretImageData:
   ; Secret image nametable + attributes (1024 bytes)
